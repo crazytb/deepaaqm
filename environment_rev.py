@@ -7,6 +7,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+from collections import namedtuple, deque
 
 # Hyperparameters
 learning_rate = 0.0001
@@ -50,47 +51,38 @@ def stepfunc(thres, x):
     else:
         return 0
 
+Transition = namedtuple('Transition',
+                        ('state', 'action', 'next_state', 'reward'))
 
-class Policy(nn.Module):
-    def __init__(self):
-        super(Policy, self).__init__()
-        self.data = []
-        self.fc1 = nn.Linear(DIMSTATES, NUMNODES + 2)
-        # self.fc2 = nn.Linear(NUMNODES + 2, NUMNODES + 2)
-        self.fc3 = nn.Linear(NUMNODES + 2, 3)
-        # self.fc1 = nn.Linear(4, 128)
-        # self.fc2 = nn.Linear(128, 2)
-        self.optimizer = optim.Adam(self.parameters(), lr=learning_rate)
+class ReplayMemory():
+    def __init__(self, capacity):
+        self.memory = deque([], maxlen=capacity)
+    def push(self, *args):
+        """Save a transition"""
+        self.memory.append(Transition(*args))
+    def sample(self, batch_size):
+        return random.sample(self.memory, batch_size)
+    def __len__(self):
+        return len(self.memory)
 
+
+class DQN(nn.Module):
+    def __init__(self, n_observations, n_actions):
+        super(DQN, self).__init__()
+        self.layer1 = nn.Linear(n_observations, round(n_observations/2))
+        self.layer2 = nn.Linear(round(n_observations/2), round(n_observations/2))
+        self.layer3 = nn.Linear(round(n_observations/2), n_actions)
+    # Called with either one element to determine next action, or a batch
+    # during optimization. Returns tensor([[left0exp,right0exp]...]).
     def forward(self, x):
-        x = F.relu(self.fc1(x))
-        # x = F.relu(self.fc2(x))
-        x = F.softmax(self.fc3(x), dim=0)
-        return x
-
-    def put_data(self, item):
-        self.data.append(item)
-
-    def normalize_rewards(self):
-        reward_mean = np.mean([x[0] for x in self.data])
-        reward_std = np.std([x[0] for x in self.data])
-        eps = np.finfo(np.float32).eps.item()
-        for i, x in enumerate(self.data):
-            self.data[i][0] = (self.data[i][0] - reward_mean) / (reward_std + eps)
-
-    def train_net(self):
-        R = 0
-        self.optimizer.zero_grad()
-        for r, prob in self.data[::-1]:
-            R = r + gamma * R
-            loss = -torch.log(prob) * R
-            loss.backward()
-        self.optimizer.step()
-        self.data = []
+        x = F.relu(self.layer1(x))
+        x = F.relu(self.layer2(x))
+        return self.layer3(x)
 
 
 class ShowerEnv(Env):
     def __init__(self):
+        super(ShowerEnv, self).__init__()
         # Actions we can take FORWARD, DISCARD, and SKIP
         self.action_space = Discrete(3)
         # ResidualSlots, CurrentAoIs, TxCounter, RemainingSlots array
@@ -107,9 +99,7 @@ class ShowerEnv(Env):
         # self.observation_space = Box(low, high, dtype=np.float64)
         self.observation_space = Box(np.float32(low), np.float32(high))
         # self.observation_space = Tuple((Discrete(100), Discrete(100), Discrete(2), Discrete(100)))
-        # Set start temp
-        # self.state = 38 + random.randint(-3,3)
-
+        
         # Set state (CurrentAoIinfo)
         self.channel = np.array([0])
         self.currentaoi = np.array([0] * NUMNODES, dtype=np.float32)
@@ -160,7 +150,7 @@ class ShowerEnv(Env):
 
         self.state = np.concatenate([self.currentaoi, self.bufferaoi])
 
-    def step(self, action, dflog, countindex):  # 여기 해야 함.
+    def step(self, action):  # 여기 해야 함.
         """
         Apply action
             0: FORWARD
