@@ -7,34 +7,38 @@ from torch.distributions import Categorical
 import random
 # import csv
 
+if torch.cuda.is_available():
+    device = torch.device("cuda")
+elif torch.backends.mps.is_available():
+    device = torch.device("mps")  
+print("device: ", device)
+
 ITERNUM = 1000
 
 RAALGO = 'CSMA'
 # RAALGO = 'slottedaloha'
 
-# BUFALGO = 'prop'
+BUFALGO = 'prop'
 # BUFALGO = 'forward'
 # BUFALGO = 'sred'
 # BUFALGO = 'random'
-BUFALGO = 'rlaqm'
+# BUFALGO = 'rlaqm'
 
 forwardprobability = 0.5
 
-writing = 0
+writing = 1
 
 p_sred = 0
 p_max = 0.15
 totaltime = 0
-maxrep = 10
+maxrep = 1
 
 df = pd.DataFrame()
-
-torch.cuda.is_available()
 
 for rep in range(maxrep):
     # env = gym.make('CartPole-v1')
     env = ShowerEnv()
-    pi = Policy()
+    pi = Policy().to(device)
     score = 0.0
     print_interval = 10
     # dflog = ra.randomaccess(NUMNODES, BEACONINTERVAL, FRAMETXSLOT, PER, RAALGO)
@@ -49,6 +53,7 @@ for rep in range(maxrep):
 
     for n_epi in range(ITERNUM):
         s = env.reset()
+        # s = torch.from_numpy(s).float().to(device)
         done = False
         blockcount = 0
         compositeaoi = 0
@@ -61,21 +66,22 @@ for rep in range(maxrep):
 
         # while not done:  # One beacon interval
         for countindex in dflog.index:  # One beacon interval
-            prob = pi(torch.from_numpy(s).float())
+            prob = pi(torch.from_numpy(s).float().to(device))
+            # prob = pi(torch.from_numpy(s).float())
             if BUFALGO == 'prop':
                 m = Categorical(prob)
-                a = m.sample()
+                a = m.sample().to(device)
             elif BUFALGO == 'random':
                 unifrv = random.random()
                 if unifrv < forwardprobability:
-                    a = torch.tensor(1)
+                    a = torch.tensor(1, device=device)
                 else:
-                    a = torch.tensor(0)
+                    a = torch.tensor(0, device=device)
             else:
                 if env.previous_action == 0:
-                    a = torch.tensor(2)
+                    a = torch.tensor(2, device=device)
                 else:
-                    a = torch.tensor(0)
+                    a = torch.tensor(0, device=device)
 
             if BUFALGO == 'sred':
                 if env.qpointer < BUFFERSIZE/6:
@@ -94,6 +100,7 @@ for rep in range(maxrep):
                 s_prime, r, done, info = env.step_rlaqm(a.item(), dflog, countindex, link_utilization)
             else:
                 s_prime, r, done, info = env.step(a.item(), dflog, countindex)
+            r = torch.tensor([r], device=device)
             pi.put_data((r, prob[a]))
             env.previous_action = a.item()
             s = s_prime
@@ -115,15 +122,8 @@ for rep in range(maxrep):
 
         if n_epi % print_interval == 0 and n_epi != 0:  # print된 값들을 csv로 만들 것.
             unique, counts = np.unique(a_set, return_counts=True)
-            print(f"# of episode:{n_epi}, "
-                  f"Channel:{env.channel}, "
-                  f"F,D,S:{counts}, "
-                  f"txed:{env.txed.sum()}, "
-                  f"avg score:{(score / print_interval):.2f}, "
-                  f"meanAoI:{env.aoi[env.aoi != 0].mean()*BEACONINTERVAL/1000:.2f}ms, "
-                  f"maxAoI:{env.aoi.max()*BEACONINTERVAL/1000:.2f}ms, "
-                  f"consumedPower:{env.consumedenergy/BEACONINTERVAL:.2f} Watt")
-
+            print(f"# of episode:{n_epi}, Channel:{env.channel}, F,D,S:{counts}, txed:{env.txed.sum()}, avg score:{int(score / print_interval)}, meanAoI:{env.aoi[env.aoi != 0].mean()*BEACONINTERVAL/1000:.2f}ms, maxAoI:{env.aoi.max()*BEACONINTERVAL/1000:.2f}ms, consumedPower:{env.consumedenergy/BEACONINTERVAL:.2f} Watt")
+            print(f"Probabilities: {prob}")
             score = 0.0
 
 df.columns = ["N_epi", "Forward", "Discard", "Skip", "Txed", "AvgScore", "MeanAoI(ms)", "MaxAoI(ms)", "AveConsPower(Watts)"]

@@ -25,7 +25,7 @@ ACCESSPROB = 1 / NUMNODES
 POWERCOEFF = 1
 AOIPENALTY = 100
 PER = 0.1
-PEAKAOITHRES = 0.05   # That is, 0.05 for 5ms, (5,20)
+PEAKAOITHRES = 0.20   # That is, 0.05 for 5ms, (5,20)
 
 # State settings
 velocity = 100   # km/h
@@ -56,17 +56,16 @@ class Policy(nn.Module):
         super(Policy, self).__init__()
         self.data = []
         self.fc1 = nn.Linear(DIMSTATES, NUMNODES + 2)
-        self.fc2 = nn.Linear(NUMNODES + 2, NUMNODES + 2)
+        # self.fc2 = nn.Linear(NUMNODES + 2, NUMNODES + 2)
         self.fc3 = nn.Linear(NUMNODES + 2, 3)
         # self.fc1 = nn.Linear(4, 128)
         # self.fc2 = nn.Linear(128, 2)
         self.optimizer = optim.Adam(self.parameters(), lr=learning_rate)
 
     def forward(self, x):
-        x = F.leaky_relu(self.fc1(x))
-        x = F.leaky_relu(self.fc2(x))
-        x = F.softmax(self.fc3(x), dim=0)
+        x = F.relu(self.fc1(x))
         # x = F.relu(self.fc2(x))
+        x = F.softmax(self.fc3(x), dim=0)
         return x
 
     def put_data(self, item):
