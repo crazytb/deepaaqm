@@ -1,9 +1,10 @@
 import randomaccess as ra
-from environment_rev import *
+from environment import *
 import numpy as np
 import pandas as pd
 import torch
 from torch.distributions import Categorical
+from torch import nn, optim
 import random
 import matplotlib
 import matplotlib.pyplot as plt
@@ -46,7 +47,7 @@ policy_net = DQN(n_observation, n_actions).to(device)
 target_net = DQN(n_observation, n_actions).to(device)
 target_net.load_state_dict(policy_net.state_dict())
 optimizer = optim.Adam(policy_net.parameters(), lr=0.001, amsgrad=True)
-BATCH_SIZE = 128
+BATCH_SIZE = 512
 memory = ReplayMemory(BATCH_SIZE)
 
 steps_done = 0
@@ -134,19 +135,22 @@ def optimize_model():
     torch.nn.utils.clip_grad_value_(policy_net.parameters(), 100)
     optimizer.step()
     
-num_episodes = 1000
+num_episodes = 100
 
 for i_episode in range(num_episodes):
     # Initialize the environment and state
-    state = env.reset()
-    state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
     dflog = ra.randomaccess(NUMNODES, BEACONINTERVAL, FRAMETXSLOT, PER, RAALGO)
     dflog = dflog[dflog['result'] == 'succ']
-    
-    for epoch in range(dflog.index[-1]):
+    dflog = dflog.reset_index(drop=True)
+    state = env.reset(dflog)
+    state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
+        
+    for epoch in dflog.index:
         print(f"Episode: {i_episode}, Epoch: {epoch}")
         # Select and perform an action
         action = select_action(state)
+        print(f"State: {state}, Action: {action}")
+        env.probenqueue(dflog)
         observation, reward, done, info = env.step(action.item())
         reward = torch.tensor([reward], device=device)
         
@@ -173,8 +177,9 @@ for i_episode in range(num_episodes):
             target_net_state_dict[key] = policy_net_state_dict[key]*0.005 + target_net_state_dict[key]*(1-0.005)
         target_net.load_state_dict(target_net_state_dict)
 
-    episode_rewards.append(reward)  # Reward 설계 새로 할 것.
-    plot_rewards()
+        if done:
+            episode_rewards.append(reward)
+            plot_rewards()
     
 print('Complete')
 plot_rewards(show_result=True)

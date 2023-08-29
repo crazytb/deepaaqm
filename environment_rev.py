@@ -24,9 +24,9 @@ BEACONINTERVAL = 100000  # microseconds
 ACCESSPROB = 1 / NUMNODES
 # ACCESSPROB = 1
 POWERCOEFF = 1
-AOIPENALTY = 100
+AOIPENALTY = 1
 PER = 0.1
-PEAKAOITHRES = 0.20   # That is, 0.05 for 5ms, (5,20)
+PEAKAOITHRES = 20   # That is, 0.05 for 5ms, (5,20)
 
 # State settings
 velocity = 100   # km/h
@@ -195,11 +195,12 @@ class ShowerEnv(Env):
 
                 # reward = (NUMNODES * np.e * TIMEEPOCH * (self.currentaoi[dequenode - 1]*BEACONINTERVAL - dequenodeaoi)) \
                 #          / (BEACONINTERVAL**2)
-                gained_aoi = self.currentaoi[dequenode - 1] - dequenodeaoi / BEACONINTERVAL
-                if self.channel == 0:
-                    self.currentaoi[dequenode - 1] = dequenodeaoi / BEACONINTERVAL
+                gained_aoi = self.currentaoi[dequenode - 1] - dequenodeaoi
+                if self.channel == [0]:
+                    self.currentaoi[dequenode - 1] = dequenodeaoi
                 # self.txed[dequenode - 1] = 1
-            reward = -0.506 * POWERCOEFF - AOIPENALTY*max([self.currentaoi.max()-PEAKAOITHRES, 0])
+            # reward = -0.506 * POWERCOEFF - AOIPENALTY*max([self.currentaoi.max()-PEAKAOITHRES, 0])
+            reward = -0.506 * POWERCOEFF
             # reward = -0.506 * POWERCOEFF + gained_aoi
             self.consumedenergy += 0.352 * TIMEEPOCH  # P.tx = 352mW, P.rx = 154mW.
 
@@ -221,7 +222,8 @@ class ShowerEnv(Env):
 
                 # reward = -0.154 * POWERCOEFF - self.currentaoi.max()
                 # self.currentaoi[dequenode - 1] = dequenodeaoi / BEACONINTERVAL
-            reward = -0.154 * POWERCOEFF - AOIPENALTY*max([self.currentaoi.max()-PEAKAOITHRES, 0])
+            # reward = -0.154 * POWERCOEFF - AOIPENALTY*max([self.currentaoi.max()-PEAKAOITHRES, 0])
+            reward = -0.154 * POWERCOEFF
             # self.consumedenergy += 0.154*TIMEEPOCH  # P.rx = 154mW.
         # 2: SKIP
         elif action == 2:
@@ -232,25 +234,14 @@ class ShowerEnv(Env):
             else:
                 # reward = -0.055 * POWERCOEFF - self.currentaoi.max()
                 pass
-            reward = -0.055 * POWERCOEFF - AOIPENALTY*max([self.currentaoi.max()-PEAKAOITHRES, 0])
+            # reward = -0.055 * POWERCOEFF - AOIPENALTY*max([self.currentaoi.max()-PEAKAOITHRES, 0])
+            reward = -0.055 * POWERCOEFF
 
             # self.consumedenergy += 0.055*TIMEEPOCH  # P.listen = 55mW.
 
         # self.aoi = np.append(self.aoi, self.currentaoi)
         self.aoi = np.vstack((self.aoi, self.currentaoi))
         # self.state = np.concatenate((buffernodeindexstate, bufferaoistate, txedstate, aoiinfostate))
-
-        if self.currenttime > 1:
-            done = True
-            # if self.aoi.mean(axis=0).max()*BEACONINTERVAL/1000 > 20:
-            #     reward -= 10000
-            # elif self.txed.sum() < NUMNODES:
-            #     # reward -= POWERCOEFF*(NUMNODES-self.txed.sum())
-            #     reward -= 10000
-            # else:
-            #     pass
-        else:
-            done = False
 
         info = {}
 
@@ -269,6 +260,15 @@ class ShowerEnv(Env):
         self.state = np.concatenate([self.channel, self.currentaoi, self.bufferaoi])
         self.qpointerhistory.append(self.qpointer)
         self.previous_action = action
+        
+        self.leftslots -= 1
+        done = self.leftslots <= 0
+        
+        # if self.currentaoi.max() >= (PEAKAOITHRES / BEACONINTERVAL):
+            
+        
+        if done:
+            reward += 1
 
         return self.state, reward, done, info
 
@@ -372,6 +372,10 @@ class ShowerEnv(Env):
 
         self.qpointerhistory.append(self.qpointer)
         self.previous_action = action
+        
+        done = self.leftslots <= 0
+        
+        
         return self.state, reward, done, info
 
     def render(self):
@@ -390,7 +394,7 @@ class ShowerEnv(Env):
         """
         return self.aoi
 
-    def reset(self):
+    def reset(self, dflog=None):
         """
         :return: np.ndarray
         """
@@ -409,5 +413,8 @@ class ShowerEnv(Env):
         self.qpointerhistory = []
 
         self.previous_action = 2
+        
+        if dflog is not None:
+            self.leftslots = dflog.index[-1] + 1
 
         return self.state
