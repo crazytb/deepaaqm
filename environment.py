@@ -1,11 +1,13 @@
 import numpy as np
 from gymnasium import Env
+from gymnasium import spaces
 from gymnasium.spaces import Discrete, Box
 import math
 import random
 import torch.nn as nn
 import torch.nn.functional as F
 from collections import namedtuple, deque
+from numpy.random import default_rng
 
 # Hyperparameters
 learning_rate = 0.0001
@@ -85,44 +87,49 @@ class ShowerEnv(Env):
         super(ShowerEnv, self).__init__()
         # Actions we can take FORWARD, DISCARD, and SKIP
         self.action_space = Discrete(3)
-        # ResidualSlots, CurrentAoIs, TxCounter, RemainingSlots array
-        low_currentaoi = np.array([0] * NUMNODES)
-        low_bufferaoi = np.array([0] * NUMNODES)
-        low_channel = np.array([0] * NUMNODES)
-        # high_currentaoi = np.array([BEACONINTERVAL - 1] * NUMNODES)
-        # high_bufferaoi = np.array([BEACONINTERVAL - 1] * NUMNODES)
-        high_currentaoi = np.array([1] * NUMNODES)
-        high_bufferaoi = np.array([1] * NUMNODES)
-        high_channel = np.array([1] * NUMNODES)
-        low = np.concatenate([low_channel, low_currentaoi, low_bufferaoi])
-        high = np.concatenate([high_channel, high_currentaoi, high_bufferaoi])
-        # self.observation_space = Box(low, high, dtype=np.float64)
-        self.observation_space = Box(np.float32(low), np.float32(high))
-        # self.observation_space = Tuple((Discrete(100), Discrete(100), Discrete(2), Discrete(100)))
+        self.max_channel_quality = 2
+        self.max_aois = BEACONINTERVAL
         
-        # Set state (CurrentAoIinfo)
-        self.channel = np.array([0])
-        self.currentaoi = np.array([0] * NUMNODES, dtype=np.float32)
-        self.bufferaoi = np.array([1] * NUMNODES, dtype=np.float32)
-        self.state = np.concatenate([self.channel, self.currentaoi, self.bufferaoi])
-        # self.bufferaoi[:] = BEACONINTERVAL - 1
+        self.observation_space = spaces.Dict({
+            "channel_quality": spaces.Discrete(self.max_channel_quality),
+            "current_aois": spaces.MultiDiscrete([self.max_aois] * NUMNODES),
+            "inbuffer_aois": spaces.MultiDiscrete([self.max_aois] * NUMNODES),
+        })
+        
+        self.rng = default_rng()
+        self.current_obs = None
+    
+    def get_obs(self):
+        return {
+            "channel_quality": self.channel,
+            "current_aois": self.currentaoi,
+            "inbuffer_aois": self.inbufferaoi,
+        }
+        
+    def flatten_dict_values(self, dict):
+        flattened = np.array([])
+        for v in list(dict.values()):
+            if isinstance(v, np.ndarray):
+                flattened = np.concatenate([flattened, v])
+            else:
+                flattened = np.concatenate([flattened, np.array([v])])
+        return flattened    
+    
+    def reset(self, seed=None, dflog=None):
+        super().reset(seed=seed)
+        self.channel = self.rng.integers(0, self.max_channel_quality)
+        self.currentaoi = np.zeros(NUMNODES, dtype=int)
+        self.inbufferaoi = np.zeros(NUMNODES, dtype=int)
+        
+        if dflog is not None:
+            self.inbufferaoi = [dflog[dflog.node==x].aoi.iloc[0] for x in range(NUMNODES)]
+            self.leftslots = dflog.index[-1] + 1
+            
+        info = self.get_obs()
+        observation = self.flatten_dict_values(info)
 
-        self.aoi = np.zeros(NUMNODES)
-        # self.aoi = np.inf*np.ones(NUMNODES)
-        self.txed = np.zeros(NUMNODES)
-        self.consumedenergy = 0
+        return observation, info
 
-        # Set buffer information (Not incorporated in state space.)
-        self.inbufferaoi = np.array([np.inf] * BUFFERSIZE)
-        self.inbuffernode = np.zeros(BUFFERSIZE, dtype=int)
-
-        # Set shower length
-        self.currenttime = 0
-        self.qpointer = 0
-        self.qpointerhistory = []
-        self.holinfo = [None] * 3   # ID, aoi at the time, aoi at current time
-
-        self.previous_action = 2
 
     def probenqueue(self, dflog):
         self.currenttime += TIMEEPOCH / BEACONINTERVAL
@@ -393,27 +400,4 @@ class ShowerEnv(Env):
         """
         return self.aoi
 
-    def reset(self, dflog=None):
-        """
-        :return: np.ndarray
-        """
-        self.channel = np.array([0])
-        self.currentaoi = np.array([0] * NUMNODES, dtype=np.float32)
-        self.bufferaoi = np.array([1] * NUMNODES, dtype=np.float32)
-        self.state = np.concatenate([self.channel, self.currentaoi, self.bufferaoi])
-
-        self.aoi = np.zeros(NUMNODES)
-        self.txed = np.zeros(NUMNODES)
-        self.consumedenergy = 0
-
-        # Set shower length
-        self.currenttime = 0
-        self.qpointer = 0
-        self.qpointerhistory = []
-
-        self.previous_action = 2
-        
-        if dflog is not None:
-            self.leftslots = dflog.index[-1] + 1
-
-        return self.state
+    

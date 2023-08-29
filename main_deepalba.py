@@ -40,7 +40,7 @@ Transition = namedtuple('Transition',
 
 env = ShowerEnv()
 n_actions = env.action_space.n
-state = env.reset()
+state, info = env.reset()
 n_observation = len(state)
 
 policy_net = DQN(n_observation, n_actions).to(device)
