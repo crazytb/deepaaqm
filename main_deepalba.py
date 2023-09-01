@@ -47,7 +47,7 @@ policy_net = DQN(n_observation, n_actions).to(device)
 target_net = DQN(n_observation, n_actions).to(device)
 target_net.load_state_dict(policy_net.state_dict())
 optimizer = optim.Adam(policy_net.parameters(), lr=0.001, amsgrad=True)
-BATCH_SIZE = 512
+BATCH_SIZE = 128
 memory = ReplayMemory(BATCH_SIZE)
 
 steps_done = 0
@@ -135,7 +135,7 @@ def optimize_model():
     torch.nn.utils.clip_grad_value_(policy_net.parameters(), 100)
     optimizer.step()
     
-num_episodes = 100
+num_episodes = 1000
 
 for i_episode in range(num_episodes):
     # Initialize the environment and state
@@ -145,22 +145,21 @@ for i_episode in range(num_episodes):
     state, info = env.reset()
     state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
         
-    for epoch in dflog.index:
-        print(f"Episode: {i_episode}, Epoch: {epoch}")
+    for epoch in range(env.leftslots):
+        # print(f"Episode: {i_episode}, Epoch: {epoch}")
         # Select and perform an action
         action = select_action(state)
-        print(f"State: {info}, Action: {action}")
+        # print(f"State: {info}, Action: {action}")
 
         env.probenqueue(dflog)
-        # observation, reward, done, info = env.step(action.item())
-        observation, reward, done, info = env.step(0)
+        observation, reward, terminated, truncated, info = env.step(action.item())
         reward = torch.tensor([reward], device=device)
         
+        done = terminated or truncated
         if done:
             next_state = None
         else:
             next_state = torch.tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
-            # next_state = torch.tensor(env.flatten_dict_values(observation), dtype=torch.float32, device=device).unsqueeze(0)
 
         # Store the transition in memory
         memory.push(state, action, next_state, reward)
@@ -187,6 +186,12 @@ print('Complete')
 plot_rewards(show_result=True)
 plt.ioff()
 plt.show()
+
+if writing == 1:
+    filename = f'result_{RAALGO}_{PER}_{NUMNODES}'
+    print(filename + ".csv")
+    df.to_csv(filename + ".csv")
+    torch.save(policy_net, filename + '.pt')
     
 
 # for rep in range(maxrep):

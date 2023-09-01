@@ -14,7 +14,7 @@ learning_rate = 0.0001
 gamma = 1
 
 # Parameters
-BUFFERSIZE = 5  # Def. 10
+BUFFERSIZE = 100  # Def. 10
 NUMNODES = 10
 DIMSTATES = 2 * NUMNODES + 1
 TIMEEPOCH = 300  # microseconds
@@ -28,28 +28,6 @@ AOIPENALTY = 1
 PER = 0.1
 PEAKAOITHRES = 20000   # That is, 5 000 for 5ms, (5,20)
 
-# State settings
-velocity = 100   # km/h
-snr_ave = 15
-snr_thr = snr_ave
-
-f_0 = 5.9e9 # Carrier freq = 5.9GHz, IEEE 802.11bd
-speedoflight = 300000   # km/sec
-f_d = velocity/(3600*speedoflight)*f_0  # Hz
-packettime = 300    # us
-fdtp = f_d*packettime/1e6
-
-TRAN_01 = (fdtp*math.sqrt(2*math.pi*snr_thr/snr_ave))/(np.exp(snr_thr/snr_ave)-1)
-TRAN_00 = 1 - TRAN_01
-TRAN_11 = fdtp*math.sqrt((2*math.pi*snr_thr)/snr_ave)
-TRAN_10 = 1 - TRAN_11
-
-
-def stepfunc(thres, x):
-    if x > thres:
-        return 1
-    else:
-        return 0
 
 Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward'))
@@ -99,22 +77,21 @@ class ShowerEnv(Env):
         
         self.rng = default_rng()
         self.current_obs = None
+
+    def _stepfunc(self, thres, x):
+        if x > thres:
+            return 1
+        else:
+            return 0
     
     def _get_obs(self):
         return {
-            "channel_quality": self.channel,
+            "channel_quality": self.channel_quality,
             "current_aois": self.current_aoi,
             "inbuffer_nodes": self.inbuffer_nodes,
             "inbuffer_timestamps": self.inbuffer_timestamps,
         }
-    
-    # def _fill_first_zero(self, arr, value):
-    #     for i in range(len(arr)):
-    #         if arr[i] == 0:
-    #             arr[i:i+len(value)] = value[:]
-    #             break
-    #     return arr
-    
+
     def _fill_first_zero(self, arr1, arr2):
         if not np.any(arr1 == 0):
             return arr1  # No zeros in arr1, return it as is
@@ -138,9 +115,39 @@ class ShowerEnv(Env):
                 flattened = np.concatenate([flattened, np.array([v])])
         return flattened
     
+    def _change_channel_quality(self):
+        # State settings
+        velocity = 100   # km/h
+        snr_thr = 15
+        snr_ave = snr_thr + 10
+        f_0 = 5.9e9 # Carrier freq = 5.9GHz, IEEE 802.11bd
+        speedoflight = 300000   # km/sec
+        f_d = velocity/(3600*speedoflight)*f_0  # Hz
+        packettime = 300    # us
+        fdtp = f_d*packettime/1e6
+        # 0: Good, 1: Bad
+        TRAN_01 = (fdtp*math.sqrt(2*math.pi*snr_thr/snr_ave))/(np.exp(snr_thr/snr_ave)-1)
+        TRAN_00 = 1 - TRAN_01
+        # TRAN_11 = fdtp*math.sqrt((2*math.pi*snr_thr)/snr_ave)
+        TRAN_10 = fdtp*math.sqrt((2*math.pi*snr_thr)/snr_ave)
+        TRAN_11 = 1 - TRAN_10
+
+        if self.channel_quality == 0:  # Bad state
+            if self._stepfunc(TRAN_00, random.random()) == 0: # 0 to 0
+                channel_quality = 0
+            else:   # 0 to 1
+                channel_quality = 1
+        else:   # Good state
+            if self._stepfunc(TRAN_11, random.random()) == 0: # 1 to 1
+                channel_quality = 1
+            else:   # 1 to 0
+                channel_quality = 0
+    
+        return channel_quality
+    
     def reset(self, seed=None):
         super().reset(seed=seed)
-        self.channel = self.rng.integers(0, self.max_channel_quality)
+        self.channel_quality = self.rng.integers(0, self.max_channel_quality)
         self.current_aoi = np.zeros(NUMNODES, dtype=float)
         self.inbuffer_nodes = np.zeros(BUFFERSIZE, dtype=int)
         self.inbuffer_timestamps = np.zeros(BUFFERSIZE, dtype=float)
@@ -156,11 +163,11 @@ class ShowerEnv(Env):
 
 
     def probenqueue(self, dflog):
-        self.currenttime += TIMEEPOCH
+        self.currenttime += TIMEEPOCH / BEACONINTERVAL
         self.current_aoi += TIMEEPOCH / BEACONINTERVAL
         
         # Define condition that the elements of the dflog can enqueue.
-        cond = (dflog.time >= self.currenttime - TIMEEPOCH) & (dflog.time < self.currenttime)
+        cond = (dflog.time >= self.currenttime*BEACONINTERVAL - TIMEEPOCH) & (dflog.time < self.currenttime*BEACONINTERVAL)
         
         # Extract target dflog
         targetdflog = dflog[cond][:self.leftbuffers]
@@ -181,104 +188,47 @@ class ShowerEnv(Env):
         self.current_obs = self._flatten_dict_values(self.info)
 
     def step(self, action):  # 여기 해야 함.
-        """
-        Apply action
-            0: FORWARD
-                1. bufferinfo sliding
-                2. AoIinfo(n) to zero, AoIinfo(-n) += 1
-                3. whethertxed(n) to one
-                4. Applying Reward(n) (Power consumption, AoI reward)
-            1: DISCARD
-                1. bufferinfo sliding
-                2. AoIinfo(all) += 1
-                3. whethertxed no change
-            2: SKIP
-                1. bufferinfo no change
-                2. AoIinfo(all) += 1
-                3. whethertxed no change
-        :return: self.state, reward, done, info = (np.ndarray, scalar, bool, ...)
-        """
-
         reward = 0
         # 0: FORWARD
         if action == 0:
             if self.inbuffer_nodes[0] == 0:
                 pass
             else:
-                dequenode = self.inbuffer_nodes[0]
-                dequenodeaoi = self.inbuffer_timestamps[0]
-                self.inbuffernode[:-1] = self.inbuffernode[1:]
-                self.inbuffernode[-1] = 0
-                self.inbufferaoi[dequenode - 1] = 0
-                self.qpointer = max(0, self.qpointer - 1)
-
-                self.txed[dequenode - 1] = 1
-
-                # reward = (NUMNODES * np.e * TIMEEPOCH * (self.current_aoi[dequenode - 1]*BEACONINTERVAL - dequenodeaoi)) \
-                #          / (BEACONINTERVAL**2)
-                gained_aoi = self.current_aoi[dequenode - 1] - dequenodeaoi
-                if self.channel == [0]:
-                    self.current_aoi[dequenode - 1] = dequenodeaoi
-                # self.txed[dequenode - 1] = 1
-            # reward = -0.506 * POWERCOEFF - AOIPENALTY*max([self.current_aoi.max()-PEAKAOITHRES, 0])
-            reward = -0.506 * POWERCOEFF
-            # reward = -0.506 * POWERCOEFF + gained_aoi
-            self.consumedenergy += 0.352 * TIMEEPOCH  # P.tx = 352mW, P.rx = 154mW.
+                dequenode = self.inbuffer_nodes[0] - 1
+                dequenodeaoi = self.currenttime - self.inbuffer_timestamps[0]
+                
+                if self.channel_quality == 0:
+                    self.current_aoi[dequenode] = dequenodeaoi
+                
+                # Left-shift bufferinfo
+                self.inbuffer_nodes[:-1] = self.inbuffer_nodes[1:]
+                self.inbuffer_nodes[-1] = 0
+                self.inbuffer_timestamps[:-1] = self.inbuffer_timestamps[1:]
+                self.inbuffer_timestamps[-1] = 0
+                self.leftbuffers += 1
+                reward -= 0.352
 
         # 1: DISCARD
         elif action == 1:
             if self.inbuffer_nodes[0] == 0:
                 pass
             else:
-                dequenode = self.inbuffernode[0]
-                dequenodeaoi = self.inbufferaoi[0]
-
                 # Left-shift bufferinfo
-                self.inbuffernode[:-1] = self.inbuffernode[1:]
-                self.inbuffernode[-1] = 0
-                self.inbufferaoi[dequenode - 1] = 0
-                self.qpointer -= 1
+                self.inbuffer_nodes[:-1] = self.inbuffer_nodes[1:]
+                self.inbuffer_nodes[-1] = 0
+                self.inbuffer_timestamps[:-1] = self.inbuffer_timestamps[1:]
+                self.inbuffer_timestamps[-1] = 0
+                self.leftbuffers += 1
+                reward -= 0.154
 
-                # reward = -0.154 * POWERCOEFF - self.current_aoi.max()
-                # self.current_aoi[dequenode - 1] = dequenodeaoi / BEACONINTERVAL
-            # reward = -0.154 * POWERCOEFF - AOIPENALTY*max([self.current_aoi.max()-PEAKAOITHRES, 0])
-            reward = -0.154 * POWERCOEFF
-            self.consumedenergy += 0.154 * TIMEEPOCH  # P.rx = 154mW.
         # 2: SKIP
         elif action == 2:
-            if self.qpointer == 0:
-                # If the buffer is empty,
-                # reward = -0.055 * POWERCOEFF - self.current_aoi.max()
-                pass
-            else:
-                # reward = -0.055 * POWERCOEFF - self.current_aoi.max()
-                pass
-            # reward = -0.055 * POWERCOEFF - AOIPENALTY*max([self.current_aoi.max()-PEAKAOITHRES, 0])
-            reward = -0.055 * POWERCOEFF
-            self.consumedenergy += 0.055 * TIMEEPOCH  # P.listen = 55mW.
+            pass
 
-        # self.aoi = np.append(self.aoi, self.current_aoi)
-        self.aoi = np.vstack((self.aoi, self.current_aoi))
-        # self.state = np.concatenate((buffernodeindexstate, bufferaoistate, txedstate, aoiinfostate))
+        self.channel_quality = self._change_channel_quality()
+        self.info = self._get_obs()
+        self.current_obs = self._flatten_dict_values(self.info)
 
-        info = {}
-
-        if self.channel == [0]:
-            if stepfunc(TRAN_00, random.random()) == 0:  # 0 to 0
-                self.channel = [0]
-            else:  # 0 to 1
-                self.channel = [1]
-        if self.channel == [1]:
-            if stepfunc(TRAN_11, random.random()) == 0:  # 1 to 1
-                self.channel = [1]
-            else:  # 0 to 1
-                self.channel = [0]
-
-        # Return step information
-        self.state = np.concatenate([self.channel, self.current_aoi, self.bufferaoi])
-        self.qpointerhistory.append(self.qpointer)
-        self.previous_action = action
-        
         self.leftslots -= 1
         done = self.leftslots <= 0
         
@@ -286,9 +236,13 @@ class ShowerEnv(Env):
             reward -= np.clip(self.current_aoi - (PEAKAOITHRES / BEACONINTERVAL), 0, None).sum()
         
         # if done:
-            # reward += 1
+        #     print("Success!")
+        #     if self.current_aoi.max() < (PEAKAOITHRES / BEACONINTERVAL):
+        #         print("Congrats!")
+        #         reward += 100
+            
 
-        return self.state, reward, done, self.info
+        return self.current_obs, reward, False, done, self.info
 
     def step_rlaqm(self, action, dflog, countindex, link_utilization):  # 여기 해야 함.
         """
@@ -327,7 +281,7 @@ class ShowerEnv(Env):
                 self.txed[dequenode - 1] = 1
                 self.current_aoi[dequenode - 1] = dequenodeaoi / BEACONINTERVAL
                 # self.txed[dequenode - 1] = 1
-            self.consumedenergy += 0.352*TIMEEPOCH  # P.tx = 352mW, P.rx = 154mW.
+            self.consumedenergy += 0.352*TIMEEPOCH*10**-6  # P.tx = 352mW, P.rx = 154mW.
 
         # 1: DISCARD
         elif action == 1:
@@ -373,19 +327,8 @@ class ShowerEnv(Env):
 
         self.info = {}
 
-        if self.channel == [0]:
-            if stepfunc(TRAN_00, random.random()) == 0:  # 0 to 0
-                self.channel = [0]
-            else:  # 0 to 1
-                self.channel = [1]
-        if self.channel == [1]:
-            if stepfunc(TRAN_11, random.random()) == 0:  # 1 to 1
-                self.channel = [1]
-            else:  # 0 to 1
-                self.channel = [0]
-
         # Return step information
-        self.state = np.concatenate([self.channel, self.current_aoi, self.bufferaoi])
+        self.state = np.concatenate([self.channel_quality, self.current_aoi, self.bufferaoi])
         reward = (link_utilization**2 - 0.5) + (2/(1+(self.aoi[self.aoi != np.inf].mean()*BEACONINTERVAL/1000)/5) - 1.5)
 
         self.qpointerhistory.append(self.qpointer)
