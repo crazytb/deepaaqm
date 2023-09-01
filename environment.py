@@ -17,7 +17,7 @@ gamma = 1
 BUFFERSIZE = 100  # Def. 100
 NUMNODES = 10
 DIMSTATES = 2 * NUMNODES + 1
-TIMEEPOCH = 250  # microseconds
+TIMEEPOCH = 300  # microseconds
 FRAMETXSLOT = 30
 BEACONINTERVAL = 100000  # microseconds
 # MAXAOI = int(np.ceil(BEACONINTERVAL / TIMEEPOCH))
@@ -88,12 +88,12 @@ class ShowerEnv(Env):
         # Actions we can take FORWARD, DISCARD, and SKIP
         self.action_space = Discrete(3)
         self.max_channel_quality = 2
-        self.max_aois = BEACONINTERVAL
+        self.max_aois = 1
         
         self.observation_space = spaces.Dict({
             "channel_quality": spaces.Discrete(self.max_channel_quality),
             "current_aois": spaces.MultiDiscrete([self.max_aois] * NUMNODES),
-            "inbuffer_aois": spaces.MultiDiscrete([self.max_aois] * NUMNODES),
+            "inbuffer_timestamps": spaces.MultiDiscrete([self.max_aois] * NUMNODES),
         })
         
         self.rng = default_rng()
@@ -102,8 +102,8 @@ class ShowerEnv(Env):
     def get_obs(self):
         return {
             "channel_quality": self.channel,
-            "current_aois": self.currentaoi,
-            "inbuffer_aois": self.inbufferaoi,
+            "current_aois": self.current_aoi,
+            "inbuffer_timestamps": self.inbuffer_timestamps,
         }
         
     def flatten_dict_values(self, dict):
@@ -115,29 +115,31 @@ class ShowerEnv(Env):
                 flattened = np.concatenate([flattened, np.array([v])])
         return flattened    
     
-    def reset(self, seed=None, dflog=None):
+    def reset(self, seed=None):
         super().reset(seed=seed)
         self.channel = self.rng.integers(0, self.max_channel_quality)
-        self.currentaoi = np.zeros(NUMNODES, dtype=int)
-        self.inbufferaoi = np.zeros(NUMNODES, dtype=int)
+        self.current_aoi = np.zeros(NUMNODES, dtype=float)
+        self.inbuffer_timestamps = np.zeros(NUMNODES, dtype=float)
         
-        if dflog is not None:
-            self.inbufferaoi = [dflog[dflog.node==x].aoi.iloc[0] for x in range(NUMNODES)]
-            self.leftslots = dflog.index[-1] + 1
+        self.leftslots = round(BEACONINTERVAL / TIMEEPOCH)
+        self.leftbuffers = BUFFERSIZE
+        self.currenttime = 0
             
         info = self.get_obs()
-        observation = self.flatten_dict_values(info)
+        self.current_obs = self.flatten_dict_values(info)
 
-        return observation, info
+        return self.current_obs, info
 
 
     def probenqueue(self, dflog):
-        self.currenttime += TIMEEPOCH / BEACONINTERVAL
-        self.currentaoi += TIMEEPOCH / BEACONINTERVAL
-        self.inbufferaoi += TIMEEPOCH / BEACONINTERVAL
-        cond = (dflog.time / BEACONINTERVAL >= self.currenttime - TIMEEPOCH / BEACONINTERVAL) & (
-                    dflog.time / BEACONINTERVAL < self.currenttime)
-        targetdflog = dflog[cond]
+        self.currenttime += TIMEEPOCH
+        self.current_aoi += TIMEEPOCH / BEACONINTERVAL
+        
+        # Define condition that the elements of the dflog can enqueue.
+        cond = (dflog.time >= self.currenttime - TIMEEPOCH) & (dflog.time < self.currenttime)
+        
+        # 
+        targetdflog = dflog[cond][:self.leftbuffers]
         tnodenumber = min([len(targetdflog), BUFFERSIZE - self.qpointer])  # 버퍼의 크기에 따라 들어올 수 있는 패킷 필터링.
         targetdflog = targetdflog[:tnodenumber]  # tnodenumber에 따라 DataFrame slicing
 
@@ -155,7 +157,7 @@ class ShowerEnv(Env):
             self.qpointer += tnodenumber
             self.consumedenergy += 0.154 * TIMEEPOCH
 
-        self.state = np.concatenate([self.currentaoi, self.bufferaoi])
+        self.state = np.concatenate([self.current_aoi, self.bufferaoi])
 
     def step(self, action):  # 여기 해야 함.
         """
@@ -182,7 +184,7 @@ class ShowerEnv(Env):
             if (self.qpointer < 0) or (self.inbuffernode[0] == 0):
                 # If the buffer is empty,
                 # reward = -1*POWERCOEFF
-                # reward = -0.506 * POWERCOEFF - self.currentaoi.max()
+                # reward = -0.506 * POWERCOEFF - self.current_aoi.max()
                 gained_aoi = 0
                 pass
             # 버퍼에 들어있지 않은 노드의 AoI를 어떻게 표현할 것인지? --> Inf로 표현.
@@ -190,8 +192,8 @@ class ShowerEnv(Env):
                 dequenode = self.inbuffernode[0]
                 dequenodeaoi = self.inbufferaoi[0]
                 # reward = -0.506 * POWERCOEFF + \
-                #          1 * (self.currentaoi[dequenode - 1] - (dflog.loc[countindex].time - dflog.loc[countindex].aoi)/BEACONINTERVAL)
-                # reward = -0.506 * POWERCOEFF - self.currentaoi.max()
+                #          1 * (self.current_aoi[dequenode - 1] - (dflog.loc[countindex].time - dflog.loc[countindex].aoi)/BEACONINTERVAL)
+                # reward = -0.506 * POWERCOEFF - self.current_aoi.max()
                 # Left-shift bufferinfo
                 self.inbuffernode[:-1] = self.inbuffernode[1:]
                 self.inbuffernode[-1] = 0
@@ -200,13 +202,13 @@ class ShowerEnv(Env):
 
                 self.txed[dequenode - 1] = 1
 
-                # reward = (NUMNODES * np.e * TIMEEPOCH * (self.currentaoi[dequenode - 1]*BEACONINTERVAL - dequenodeaoi)) \
+                # reward = (NUMNODES * np.e * TIMEEPOCH * (self.current_aoi[dequenode - 1]*BEACONINTERVAL - dequenodeaoi)) \
                 #          / (BEACONINTERVAL**2)
-                gained_aoi = self.currentaoi[dequenode - 1] - dequenodeaoi
+                gained_aoi = self.current_aoi[dequenode - 1] - dequenodeaoi
                 if self.channel == [0]:
-                    self.currentaoi[dequenode - 1] = dequenodeaoi
+                    self.current_aoi[dequenode - 1] = dequenodeaoi
                 # self.txed[dequenode - 1] = 1
-            # reward = -0.506 * POWERCOEFF - AOIPENALTY*max([self.currentaoi.max()-PEAKAOITHRES, 0])
+            # reward = -0.506 * POWERCOEFF - AOIPENALTY*max([self.current_aoi.max()-PEAKAOITHRES, 0])
             reward = -0.506 * POWERCOEFF
             # reward = -0.506 * POWERCOEFF + gained_aoi
             self.consumedenergy += 0.352 * TIMEEPOCH  # P.tx = 352mW, P.rx = 154mW.
@@ -215,7 +217,7 @@ class ShowerEnv(Env):
         elif action == 1:
             if self.qpointer == 0:
                 # If the buffer is empty,
-                # reward = -0.154 * POWERCOEFF - self.currentaoi.max()
+                # reward = -0.154 * POWERCOEFF - self.current_aoi.max()
                 pass
             else:
                 dequenode = self.inbuffernode[0]
@@ -227,26 +229,26 @@ class ShowerEnv(Env):
                 self.inbufferaoi[dequenode - 1] = 0
                 self.qpointer -= 1
 
-                # reward = -0.154 * POWERCOEFF - self.currentaoi.max()
-                # self.currentaoi[dequenode - 1] = dequenodeaoi / BEACONINTERVAL
-            # reward = -0.154 * POWERCOEFF - AOIPENALTY*max([self.currentaoi.max()-PEAKAOITHRES, 0])
+                # reward = -0.154 * POWERCOEFF - self.current_aoi.max()
+                # self.current_aoi[dequenode - 1] = dequenodeaoi / BEACONINTERVAL
+            # reward = -0.154 * POWERCOEFF - AOIPENALTY*max([self.current_aoi.max()-PEAKAOITHRES, 0])
             reward = -0.154 * POWERCOEFF
             self.consumedenergy += 0.154 * TIMEEPOCH  # P.rx = 154mW.
         # 2: SKIP
         elif action == 2:
             if self.qpointer == 0:
                 # If the buffer is empty,
-                # reward = -0.055 * POWERCOEFF - self.currentaoi.max()
+                # reward = -0.055 * POWERCOEFF - self.current_aoi.max()
                 pass
             else:
-                # reward = -0.055 * POWERCOEFF - self.currentaoi.max()
+                # reward = -0.055 * POWERCOEFF - self.current_aoi.max()
                 pass
-            # reward = -0.055 * POWERCOEFF - AOIPENALTY*max([self.currentaoi.max()-PEAKAOITHRES, 0])
+            # reward = -0.055 * POWERCOEFF - AOIPENALTY*max([self.current_aoi.max()-PEAKAOITHRES, 0])
             reward = -0.055 * POWERCOEFF
             self.consumedenergy += 0.055 * TIMEEPOCH  # P.listen = 55mW.
 
-        # self.aoi = np.append(self.aoi, self.currentaoi)
-        self.aoi = np.vstack((self.aoi, self.currentaoi))
+        # self.aoi = np.append(self.aoi, self.current_aoi)
+        self.aoi = np.vstack((self.aoi, self.current_aoi))
         # self.state = np.concatenate((buffernodeindexstate, bufferaoistate, txedstate, aoiinfostate))
 
         info = {}
@@ -263,15 +265,15 @@ class ShowerEnv(Env):
                 self.channel = [0]
 
         # Return step information
-        self.state = np.concatenate([self.channel, self.currentaoi, self.bufferaoi])
+        self.state = np.concatenate([self.channel, self.current_aoi, self.bufferaoi])
         self.qpointerhistory.append(self.qpointer)
         self.previous_action = action
         
         self.leftslots -= 1
         done = self.leftslots <= 0
         
-        if self.currentaoi.max() >= (PEAKAOITHRES / BEACONINTERVAL):
-            reward -= np.clip(self.currentaoi - (PEAKAOITHRES / BEACONINTERVAL), 0, None).sum()
+        if self.current_aoi.max() >= (PEAKAOITHRES / BEACONINTERVAL):
+            reward -= np.clip(self.current_aoi - (PEAKAOITHRES / BEACONINTERVAL), 0, None).sum()
         
         # if done:
             # reward += 1
@@ -313,7 +315,7 @@ class ShowerEnv(Env):
                 self.qpointer = max(0, self.qpointer - 1)
 
                 self.txed[dequenode - 1] = 1
-                self.currentaoi[dequenode - 1] = dequenodeaoi / BEACONINTERVAL
+                self.current_aoi[dequenode - 1] = dequenodeaoi / BEACONINTERVAL
                 # self.txed[dequenode - 1] = 1
             self.consumedenergy += 0.352*TIMEEPOCH  # P.tx = 352mW, P.rx = 154mW.
 
@@ -332,7 +334,7 @@ class ShowerEnv(Env):
                 self.inbufferaoi[dequenode - 1] = 0
                 self.qpointer -= 1
 
-                self.currentaoi[dequenode - 1] = dequenodeaoi / BEACONINTERVAL
+                self.current_aoi[dequenode - 1] = dequenodeaoi / BEACONINTERVAL
             # self.consumedenergy += 0.154*TIMEEPOCH  # P.rx = 154mW.
         # 2: SKIP
         elif action == 2:
@@ -343,8 +345,8 @@ class ShowerEnv(Env):
                 pass
             # self.consumedenergy += 0.055*TIMEEPOCH  # P.listen = 55mW.
 
-        # self.aoi = np.append(self.aoi, self.currentaoi)
-        self.aoi = np.vstack((self.aoi, self.currentaoi))
+        # self.aoi = np.append(self.aoi, self.current_aoi)
+        self.aoi = np.vstack((self.aoi, self.current_aoi))
         # self.state = np.concatenate((buffernodeindexstate, bufferaoistate, txedstate, aoiinfostate))
 
         if self.currenttime > 1:
@@ -373,7 +375,7 @@ class ShowerEnv(Env):
                 self.channel = [0]
 
         # Return step information
-        self.state = np.concatenate([self.channel, self.currentaoi, self.bufferaoi])
+        self.state = np.concatenate([self.channel, self.current_aoi, self.bufferaoi])
         reward = (link_utilization**2 - 0.5) + (2/(1+(self.aoi[self.aoi != np.inf].mean()*BEACONINTERVAL/1000)/5) - 1.5)
 
         self.qpointerhistory.append(self.qpointer)

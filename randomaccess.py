@@ -20,7 +20,7 @@ def randomaccess(numnodes, beaconinterval, frametxslot, per, raalgo):
         succ_namestamp = np.array([], dtype=int)
         retx = np.zeros(numnodes, dtype=int)
         aoitimestamp = np.zeros(numnodes, dtype=int)
-        df = pd.DataFrame(columns=['time', 'node', 'aoi', 'result'])
+        df = pd.DataFrame(columns=['time', 'node', 'timestamp', 'result'])
 
         while currentslot < beaconinterval/slottime - frametxslot:
             per_rv = random.random()
@@ -35,7 +35,7 @@ def randomaccess(numnodes, beaconinterval, frametxslot, per, raalgo):
                 ind, = np.where(bo_counter == 0)
                 retx[ind] = 0
                 # print(f"Time: {currentslot}, Tx success from {ind+1} with AoI {aoi[ind]}")
-                df2 = pd.DataFrame({'time': currentslot*slottime, 'node': ind, 'aoi': aoitimestamp[ind]*slottime, 'result': 'succ'})
+                df2 = pd.DataFrame({'time': currentslot*slottime, 'node': ind, 'timestamp': aoitimestamp[ind]*slottime, 'result': 'succ'})
                 df = pd.concat([df, df2], ignore_index=True, axis=0)
                 aoitimestamp[retx == 0] = currentslot
                 succ_timestamp = np.append(succ_timestamp, currentslot)
@@ -54,7 +54,7 @@ def randomaccess(numnodes, beaconinterval, frametxslot, per, raalgo):
                         bo_stage[x] += 1
                     bo_counter[x] = np.random.randint(contentionwindowsize[bo_stage[x]])
                 # print(f"Time: {currentslot}, Tx collision from {ind+1} with AoI {aoi[ind]}")
-                df2 = pd.DataFrame({'time': currentslot*slottime, 'node': ind, 'aoi': aoitimestamp[ind]*slottime, 'result': 'fail'})
+                df2 = pd.DataFrame({'time': currentslot*slottime, 'node': ind, 'timestamp': aoitimestamp[ind]*slottime, 'result': 'fail'})
                 df = pd.concat([df, df2], ignore_index=True, axis=0)
                 aoitimestamp[retx == 0] = currentslot
                 num_fail += 1
@@ -69,7 +69,7 @@ def randomaccess(numnodes, beaconinterval, frametxslot, per, raalgo):
                         bo_stage[x] += 1
                     bo_counter[x] = np.random.randint(contentionwindowsize[bo_stage[x]])
                 # print(f"Time: {currentslot}, Tx collision from {ind+1} with AoI {aoi[ind]}")
-                df2 = pd.DataFrame({'time': currentslot*slottime, 'node': ind, 'aoi': aoitimestamp[ind]*slottime, 'result': 'coll'})
+                df2 = pd.DataFrame({'time': currentslot*slottime, 'node': ind, 'timestamp': aoitimestamp[ind]*slottime, 'result': 'coll'})
                 df = pd.concat([df, df2], ignore_index=True, axis=0)
                 aoitimestamp[retx == 0] = currentslot
                 num_coll += 1
@@ -88,7 +88,7 @@ def randomaccess(numnodes, beaconinterval, frametxslot, per, raalgo):
         succ_namestamp = np.array([], dtype=int)
         retx = np.zeros(numnodes, dtype=int)
         aoitimestamp = np.zeros(numnodes, dtype=int)
-        df = pd.DataFrame(columns=['time', 'node', 'aoi', 'result'])
+        df = pd.DataFrame(columns=['time', 'node', 'timestamp', 'result'])
 
         while currentslot < beaconinterval/slottime - frametxslot:
             txprobarray = (np.random.rand(numnodes) < txprob).astype(int)
@@ -100,7 +100,7 @@ def randomaccess(numnodes, beaconinterval, frametxslot, per, raalgo):
             elif (random.random() > per) and (txprobarray.sum() == 1):
                 ind, = np.where(txprobarray == 1)
                 # print(f"Time: {currentslot}, Tx success from {ind+1} with AoI {aoi[ind]}")
-                df2 = pd.DataFrame({'time': currentslot*slottime, 'node': ind, 'aoi': aoitimestamp[ind]*slottime, 'result': 'succ'})
+                df2 = pd.DataFrame({'time': currentslot*slottime, 'node': ind, 'timestamp': aoitimestamp[ind]*slottime, 'result': 'succ'})
                 df = pd.concat([df, df2], ignore_index=True, axis=0)
                 retx[ind] = 0
                 aoitimestamp[retx == 0] = currentslot
@@ -111,7 +111,7 @@ def randomaccess(numnodes, beaconinterval, frametxslot, per, raalgo):
             else:
                 ind, = np.where(txprobarray == 1)
                 # print(f"Time: {currentslot}, Tx collision from {ind+1} with AoI {aoi[ind]}")
-                # df2 = pd.DataFrame({'time': currentslot*slottime, 'node': ind, 'aoi': aoitimestamp[ind]*slottime, 'result': 'coll'})
+                # df2 = pd.DataFrame({'time': currentslot*slottime, 'node': ind, 'timestamp': aoitimestamp[ind]*slottime, 'result': 'coll'})
                 # df = pd.concat([df, df2], ignore_index=True, axis=0)
                 retx[ind] = 1
                 num_coll += 1

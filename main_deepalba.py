@@ -142,7 +142,7 @@ for i_episode in range(num_episodes):
     dflog = ra.randomaccess(NUMNODES, BEACONINTERVAL, FRAMETXSLOT, PER, RAALGO)
     dflog = dflog[dflog['result'] == 'succ']
     dflog = dflog.reset_index(drop=True)
-    state = env.reset(dflog)
+    state, info = env.reset()
     state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
         
     for epoch in dflog.index:
@@ -150,6 +150,7 @@ for i_episode in range(num_episodes):
         # Select and perform an action
         action = select_action(state)
         print(f"State: {state}, Action: {action}")
+
         env.probenqueue(dflog)
         observation, reward, done, info = env.step(action.item())
         reward = torch.tensor([reward], device=device)
