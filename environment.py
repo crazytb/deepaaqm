@@ -111,7 +111,7 @@ class ShowerEnv(Env):
     def _fill_first_zero(self, arr, value):
         for i in range(len(arr)):
             if arr[i] == 0:
-                arr[i] = value
+                arr[i:i+len(value)] = value[:]
                 break
         return arr
 
@@ -128,7 +128,7 @@ class ShowerEnv(Env):
         super().reset(seed=seed)
         self.channel = self.rng.integers(0, self.max_channel_quality)
         self.current_aoi = np.zeros(NUMNODES, dtype=float)
-        self.inbuffer_nodes = 10 * np.ones(BUFFERSIZE, dtype=int)
+        self.inbuffer_nodes = np.zeros(BUFFERSIZE, dtype=int)
         self.inbuffer_timestamps = np.zeros(BUFFERSIZE, dtype=float)
         
         self.leftslots = round(BEACONINTERVAL / TIMEEPOCH)
@@ -160,13 +160,11 @@ class ShowerEnv(Env):
             enquenode = targetdflog.node.values.astype(int)
             enquenodetimestamp = targetdflog.timestamp.values.astype(int)
 
-            self.inbuffernode[self.qpointer:self.qpointer + tnodenumber] = enquenode
-            self.inbufferaoi[self.qpointer:self.qpointer + tnodenumber] = \
-                ((self.currenttime - enquenodeentrytime / BEACONINTERVAL) + enquenodetimestamp / BEACONINTERVAL)
-            self.qpointer += tnodenumber
-            self.consumedenergy += 0.154 * TIMEEPOCH
-
-        self.state = np.concatenate([self.current_aoi, self.bufferaoi])
+            self._fill_first_zero(self.inbuffer_nodes, enquenode)
+            self._fill_first_zero(self.inbuffer_timestamps, enquenodetimestamp / BEACONINTERVAL)
+            
+        self.info = self._get_obs()
+        self.current_obs = self._flatten_dict_values(self.info)
 
     def step(self, action):  # 여기 해야 함.
         """
