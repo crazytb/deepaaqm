@@ -14,7 +14,7 @@ learning_rate = 0.0001
 gamma = 1
 
 # Parameters
-BUFFERSIZE = 100  # Def. 100
+BUFFERSIZE = 5  # Def. 10
 NUMNODES = 10
 DIMSTATES = 2 * NUMNODES + 1
 TIMEEPOCH = 300  # microseconds
@@ -92,43 +92,53 @@ class ShowerEnv(Env):
         
         self.observation_space = spaces.Dict({
             "channel_quality": spaces.Discrete(self.max_channel_quality),
-            "current_aois": spaces.MultiDiscrete([self.max_aois] * NUMNODES),
-            "inbuffer_timestamps": spaces.MultiDiscrete([self.max_aois] * NUMNODES),
+            "current_aois": spaces.Box(low=0, high=1, shape=(1, NUMNODES)),
+            "inbuffer_nodes": spaces.MultiDiscrete([NUMNODES] * BUFFERSIZE),
+            "inbuffer_timestamps": spaces.Box(low=0, high=1, shape=(1, BUFFERSIZE)),
         })
         
         self.rng = default_rng()
         self.current_obs = None
     
-    def get_obs(self):
+    def _get_obs(self):
         return {
             "channel_quality": self.channel,
             "current_aois": self.current_aoi,
+            "inbuffer_nodes": self.inbuffer_nodes,
             "inbuffer_timestamps": self.inbuffer_timestamps,
         }
-        
-    def flatten_dict_values(self, dict):
+    
+    def _fill_first_zero(self, arr, value):
+        for i in range(len(arr)):
+            if arr[i] == 0:
+                arr[i] = value
+                break
+        return arr
+
+    def _flatten_dict_values(self, dict):
         flattened = np.array([])
         for v in list(dict.values()):
             if isinstance(v, np.ndarray):
                 flattened = np.concatenate([flattened, v])
             else:
                 flattened = np.concatenate([flattened, np.array([v])])
-        return flattened    
+        return flattened
     
     def reset(self, seed=None):
         super().reset(seed=seed)
         self.channel = self.rng.integers(0, self.max_channel_quality)
         self.current_aoi = np.zeros(NUMNODES, dtype=float)
-        self.inbuffer_timestamps = np.zeros(NUMNODES, dtype=float)
+        self.inbuffer_nodes = 10 * np.ones(BUFFERSIZE, dtype=int)
+        self.inbuffer_timestamps = np.zeros(BUFFERSIZE, dtype=float)
         
         self.leftslots = round(BEACONINTERVAL / TIMEEPOCH)
         self.leftbuffers = BUFFERSIZE
         self.currenttime = 0
             
-        info = self.get_obs()
-        self.current_obs = self.flatten_dict_values(info)
+        self.info = self._get_obs()
+        self.current_obs = self._flatten_dict_values(self.info)
 
-        return self.current_obs, info
+        return self.current_obs, self.info
 
 
     def probenqueue(self, dflog):
@@ -138,22 +148,21 @@ class ShowerEnv(Env):
         # Define condition that the elements of the dflog can enqueue.
         cond = (dflog.time >= self.currenttime - TIMEEPOCH) & (dflog.time < self.currenttime)
         
-        # 
+        # Extract target dflog
         targetdflog = dflog[cond][:self.leftbuffers]
-        tnodenumber = min([len(targetdflog), BUFFERSIZE - self.qpointer])  # 버퍼의 크기에 따라 들어올 수 있는 패킷 필터링.
-        targetdflog = targetdflog[:tnodenumber]  # tnodenumber에 따라 DataFrame slicing
+        tnodenumber = len(targetdflog)
+        self.leftbuffers = BUFFERSIZE - tnodenumber
 
-        if len(targetdflog) == 0:
-        # if (len(targetdflog) == 0) or (self.previous_action == 0):
+        if tnodenumber == 0:
             pass
         else:
             enquenodeentrytime = targetdflog.time.values.astype(int)
             enquenode = targetdflog.node.values.astype(int)
-            enquenodeaoi = targetdflog.aoi.values.astype(int)
+            enquenodetimestamp = targetdflog.timestamp.values.astype(int)
 
             self.inbuffernode[self.qpointer:self.qpointer + tnodenumber] = enquenode
             self.inbufferaoi[self.qpointer:self.qpointer + tnodenumber] = \
-                ((self.currenttime - enquenodeentrytime / BEACONINTERVAL) + enquenodeaoi / BEACONINTERVAL)
+                ((self.currenttime - enquenodeentrytime / BEACONINTERVAL) + enquenodetimestamp / BEACONINTERVAL)
             self.qpointer += tnodenumber
             self.consumedenergy += 0.154 * TIMEEPOCH
 
@@ -278,7 +287,7 @@ class ShowerEnv(Env):
         # if done:
             # reward += 1
 
-        return self.state, reward, done, info
+        return self.state, reward, done, self.info
 
     def step_rlaqm(self, action, dflog, countindex, link_utilization):  # 여기 해야 함.
         """
@@ -361,7 +370,7 @@ class ShowerEnv(Env):
         else:
             done = False
 
-        info = {}
+        self.info = {}
 
         if self.channel == [0]:
             if stepfunc(TRAN_00, random.random()) == 0:  # 0 to 0
@@ -384,7 +393,7 @@ class ShowerEnv(Env):
         done = self.leftslots <= 0
         
         
-        return self.state, reward, done, info
+        return self.state, reward, done, self.info
 
     def render(self):
         # Implement viz

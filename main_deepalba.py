@@ -149,7 +149,7 @@ for i_episode in range(num_episodes):
         print(f"Episode: {i_episode}, Epoch: {epoch}")
         # Select and perform an action
         action = select_action(state)
-        print(f"State: {state}, Action: {action}")
+        print(f"State: {info}, Action: {action}")
 
         env.probenqueue(dflog)
         observation, reward, done, info = env.step(action.item())
