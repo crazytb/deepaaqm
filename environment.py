@@ -108,12 +108,26 @@ class ShowerEnv(Env):
             "inbuffer_timestamps": self.inbuffer_timestamps,
         }
     
-    def _fill_first_zero(self, arr, value):
-        for i in range(len(arr)):
-            if arr[i] == 0:
-                arr[i:i+len(value)] = value[:]
-                break
-        return arr
+    # def _fill_first_zero(self, arr, value):
+    #     for i in range(len(arr)):
+    #         if arr[i] == 0:
+    #             arr[i:i+len(value)] = value[:]
+    #             break
+    #     return arr
+    
+    def _fill_first_zero(self, arr1, arr2):
+        if not np.any(arr1 == 0):
+            return arr1  # No zeros in arr1, return it as is
+
+        zero_index = np.where(arr1 == 0)[0][0]
+        remaining_zeros = np.count_nonzero(arr1 == 0) - zero_index  # Calculate the number of remaining zeros after the first zero
+        
+        if remaining_zeros >= len(arr2):
+            arr1[zero_index:zero_index + len(arr2)] = arr2[:remaining_zeros]
+        else:
+            arr1[zero_index:zero_index + remaining_zeros] = arr2[:remaining_zeros]
+
+        return arr1
 
     def _flatten_dict_values(self, dict):
         flattened = np.array([])
@@ -188,20 +202,11 @@ class ShowerEnv(Env):
         reward = 0
         # 0: FORWARD
         if action == 0:
-            if (self.qpointer < 0) or (self.inbuffernode[0] == 0):
-                # If the buffer is empty,
-                # reward = -1*POWERCOEFF
-                # reward = -0.506 * POWERCOEFF - self.current_aoi.max()
-                gained_aoi = 0
+            if self.inbuffer_nodes[0] == 0:
                 pass
-            # 버퍼에 들어있지 않은 노드의 AoI를 어떻게 표현할 것인지? --> Inf로 표현.
             else:
-                dequenode = self.inbuffernode[0]
-                dequenodeaoi = self.inbufferaoi[0]
-                # reward = -0.506 * POWERCOEFF + \
-                #          1 * (self.current_aoi[dequenode - 1] - (dflog.loc[countindex].time - dflog.loc[countindex].aoi)/BEACONINTERVAL)
-                # reward = -0.506 * POWERCOEFF - self.current_aoi.max()
-                # Left-shift bufferinfo
+                dequenode = self.inbuffer_nodes[0]
+                dequenodeaoi = self.inbuffer_timestamps[0]
                 self.inbuffernode[:-1] = self.inbuffernode[1:]
                 self.inbuffernode[-1] = 0
                 self.inbufferaoi[dequenode - 1] = 0
@@ -222,9 +227,7 @@ class ShowerEnv(Env):
 
         # 1: DISCARD
         elif action == 1:
-            if self.qpointer == 0:
-                # If the buffer is empty,
-                # reward = -0.154 * POWERCOEFF - self.current_aoi.max()
+            if self.inbuffer_nodes[0] == 0:
                 pass
             else:
                 dequenode = self.inbuffernode[0]

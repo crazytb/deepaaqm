@@ -152,7 +152,8 @@ for i_episode in range(num_episodes):
         print(f"State: {info}, Action: {action}")
 
         env.probenqueue(dflog)
-        observation, reward, done, info = env.step(action.item())
+        # observation, reward, done, info = env.step(action.item())
+        observation, reward, done, info = env.step(0)
         reward = torch.tensor([reward], device=device)
         
         if done:
