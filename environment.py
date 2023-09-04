@@ -49,14 +49,12 @@ class DQN(nn.Module):
         super(DQN, self).__init__()
         self.layer1 = nn.Linear(n_observations, round(n_observations/2))
         self.layer2 = nn.Linear(round(n_observations/2), round(n_observations/2))
-        self.layer3 = nn.Linear(round(n_observations/2), round(n_observations/2))
         self.layer4 = nn.Linear(round(n_observations/2), n_actions)
     # Called with either one element to determine next action, or a batch
     # during optimization. Returns tensor([[left0exp,right0exp]...]).
     def forward(self, x):
         x = F.relu(self.layer1(x))
         x = F.relu(self.layer2(x))
-        x = F.relu(self.layer3(x))
         return self.layer4(x)
 
 
