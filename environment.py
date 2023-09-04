@@ -232,8 +232,8 @@ class ShowerEnv(Env):
         self.leftslots -= 1
         done = self.leftslots <= 0
         
-        if self.current_aoi.max() >= (PEAKAOITHRES / BEACONINTERVAL):
-            reward -= np.clip(self.current_aoi - (PEAKAOITHRES / BEACONINTERVAL), 0, None).sum()
+        # if self.current_aoi.max() >= (PEAKAOITHRES / BEACONINTERVAL):
+        reward -= np.clip(self.current_aoi - (PEAKAOITHRES / BEACONINTERVAL), 0, None).sum()
         
         # if done:
         #     print("Success!")
