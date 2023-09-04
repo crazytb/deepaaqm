@@ -39,6 +39,7 @@ Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward'))
 
 env = ShowerEnv()
+# env = ShowerEnv()
 n_actions = env.action_space.n
 state, info = env.reset()
 n_observation = len(state)
