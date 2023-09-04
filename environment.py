@@ -14,7 +14,7 @@ learning_rate = 0.0001
 gamma = 1
 
 # Parameters
-BUFFERSIZE = 10  # Def. 10
+BUFFERSIZE = 100  # Def. 10
 NUMNODES = 10
 DIMSTATES = 2 * NUMNODES + 1
 TIMEEPOCH = 300  # microseconds

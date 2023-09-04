@@ -136,7 +136,7 @@ def optimize_model():
     torch.nn.utils.clip_grad_value_(policy_net.parameters(), 100)
     optimizer.step()
     
-num_episodes = 100
+num_episodes = 500
 
 for i_episode in range(num_episodes):
     # Initialize the environment and state
@@ -146,8 +146,8 @@ for i_episode in range(num_episodes):
     state, info = env.reset()
     state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
         
-    for epoch in range(env.leftslots):
-        # print(f"Episode: {i_episode}, Epoch: {epoch}")
+    for epoch in range(BEACONINTERVAL//TIMEEPOCH):
+        print(f"Episode: {i_episode}/{num_episodes}, Epoch: {epoch}/{BEACONINTERVAL//TIMEEPOCH}")
         # Select and perform an action
         action = select_action(state)
         # print(f"State: {info}, Action: {action}")
