@@ -190,7 +190,7 @@ plt.ioff()
 plt.show()
 
 if writing == 1:
-    filename = f'result_{RAALGO}_{PER}_{NUMNODES}'
+    filename = f'policy_model_deepaaqm'
     print(filename + ".csv")
     df.to_csv(filename + ".csv")
     torch.save(policy_net, filename + '.pt')
