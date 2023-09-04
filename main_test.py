@@ -62,7 +62,7 @@ def test_model(model, env, dflog, simmode):
 
 # Define test env and test model    
 test_env = ShowerEnv()
-policy_net_deepaaqm = torch.load("result_CSMA_0.1_10.pt")
+policy_net_deepaaqm = torch.load("policy_model_deepaaqm.pt")
 policy_net_deepaaqm.eval()
 # policy_net_rlaqm = torch.load("rlaqm.pt")
 
