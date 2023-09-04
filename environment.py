@@ -14,7 +14,7 @@ learning_rate = 0.0001
 gamma = 1
 
 # Parameters
-BUFFERSIZE = 100  # Def. 10
+BUFFERSIZE = 10  # Def. 10
 NUMNODES = 10
 DIMSTATES = 2 * NUMNODES + 1
 TIMEEPOCH = 300  # microseconds
@@ -245,99 +245,7 @@ class ShowerEnv(Env):
         return self.current_obs, reward, False, done, self.info
 
     def step_rlaqm(self, action, dflog, countindex, link_utilization):  # 여기 해야 함.
-        """
-        Apply action
-            0: FORWARD
-                1. bufferinfo sliding
-                2. AoIinfo(n) to zero, AoIinfo(-n) += 1
-                3. whethertxed(n) to one
-                4. Applying Reward(n) (Power consumption, AoI reward)
-            1: DISCARD
-                1. bufferinfo sliding
-                2. AoIinfo(all) += 1
-                3. whethertxed no change
-            2: SKIP
-                1. bufferinfo no change
-                2. AoIinfo(all) += 1
-                3. whethertxed no change
-        :return: self.state, reward, done, info = (np.ndarray, scalar, bool, ...)
-        """
-
-        # 0: FORWARD
-        if action == 0:
-            if (self.qpointer < 0) or (self.inbuffernode[0] == 0):
-                # If the buffer is empty,
-                pass
-            # 버퍼에 들어있지 않은 노드의 AoI를 어떻게 표현할 것인지? --> Inf로 표현.
-            else:
-                dequenode = self.inbuffernode[0]
-                dequenodeaoi = self.inbufferaoi[0]
-                # Left-shift bufferinfo
-                self.inbuffernode[:-1] = self.inbuffernode[1:]
-                self.inbuffernode[-1] = 0
-                self.inbufferaoi[dequenode - 1] = 0
-                self.qpointer = max(0, self.qpointer - 1)
-
-                self.txed[dequenode - 1] = 1
-                self.current_aoi[dequenode - 1] = dequenodeaoi / BEACONINTERVAL
-                # self.txed[dequenode - 1] = 1
-            self.consumedenergy += 0.352*TIMEEPOCH*10**-6  # P.tx = 352mW, P.rx = 154mW.
-
-        # 1: DISCARD
-        elif action == 1:
-            if self.qpointer == 0:
-                # If the buffer is empty,
-                pass
-            else:
-                dequenode = self.inbuffernode[0]
-                dequenodeaoi = self.inbufferaoi[0]
-
-                # Left-shift bufferinfo
-                self.inbuffernode[:-1] = self.inbuffernode[1:]
-                self.inbuffernode[-1] = 0
-                self.inbufferaoi[dequenode - 1] = 0
-                self.qpointer -= 1
-
-                self.current_aoi[dequenode - 1] = dequenodeaoi / BEACONINTERVAL
-            # self.consumedenergy += 0.154*TIMEEPOCH  # P.rx = 154mW.
-        # 2: SKIP
-        elif action == 2:
-            if self.qpointer == 0:
-                # If the buffer is empty,
-                pass
-            else:
-                pass
-            # self.consumedenergy += 0.055*TIMEEPOCH  # P.listen = 55mW.
-
-        # self.aoi = np.append(self.aoi, self.current_aoi)
-        self.aoi = np.vstack((self.aoi, self.current_aoi))
-        # self.state = np.concatenate((buffernodeindexstate, bufferaoistate, txedstate, aoiinfostate))
-
-        if self.currenttime > 1:
-            done = True
-            # if self.aoi.mean(axis=0).max()*BEACONINTERVAL/1000 > 20:
-            #     reward -= 10000
-            # elif self.txed.sum() < NUMNODES:
-            #     # reward -= POWERCOEFF*(NUMNODES-self.txed.sum())
-            #     reward -= 10000
-            # else:
-            #     pass
-        else:
-            done = False
-
-        self.info = {}
-
-        # Return step information
-        self.state = np.concatenate([self.channel_quality, self.current_aoi, self.bufferaoi])
-        reward = (link_utilization**2 - 0.5) + (2/(1+(self.aoi[self.aoi != np.inf].mean()*BEACONINTERVAL/1000)/5) - 1.5)
-
-        self.qpointerhistory.append(self.qpointer)
-        self.previous_action = action
-        
-        done = self.leftslots <= 0
-        
-        
-        return self.state, reward, done, self.info
+        ...
 
     def render(self):
         # Implement viz
