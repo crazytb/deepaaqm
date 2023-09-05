@@ -17,6 +17,7 @@ gamma = 1
 BUFFERSIZE = 5  # Def. 10
 NUMNODES = 10
 DIMSTATES = 2 * NUMNODES + 1
+FRAMETIME = 270  # microseconds
 TIMEEPOCH = 300  # microseconds
 FRAMETXSLOT = 30
 BEACONINTERVAL = 100000  # microseconds
@@ -156,6 +157,7 @@ class ShowerEnv(Env):
         self.leftslots = round(BEACONINTERVAL / TIMEEPOCH)
         self.leftbuffers = BUFFERSIZE
         self.currenttime = 0
+        self.consumed_energy = 0
             
         self.info = self._get_obs()
         self.current_obs = self._flatten_dict_values(self.info)
@@ -217,7 +219,8 @@ class ShowerEnv(Env):
                 self.inbuffer_timestamps[:-1] = self.inbuffer_timestamps[1:]
                 self.inbuffer_timestamps[-1] = 0
                 self.leftbuffers += 1
-                reward -= 0.352
+                reward -= 0.308
+                self.consumed_energy += 280 * 1.1 * FRAMETIME    # milliamperes * voltage * time
 
         # 1: DISCARD
         elif action == 1:
@@ -231,6 +234,7 @@ class ShowerEnv(Env):
                 self.inbuffer_timestamps[-1] = 0
                 self.leftbuffers += 1
                 reward -= 0.154
+                self.consumed_energy += 50 * 1.1 * FRAMETIME    # milliamperes * voltage * time
 
         # 2: SKIP
         elif action == 2:

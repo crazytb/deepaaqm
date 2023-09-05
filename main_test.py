@@ -25,7 +25,7 @@ def test_model(model, env, dflog, simmode):
     df = pd.DataFrame()
     next_state, info = env.reset()
     reward = 0
-    for i in range(BEACONINTERVAL//TIMEEPOCH):
+    for epoch in range(BEACONINTERVAL//TIMEEPOCH):
         env.probenqueue(dflog)
         # 0: Forward, 1: Discard, 2: Skip
         if simmode == "deepaaqm" or simmode == "rlaqm":
@@ -48,15 +48,18 @@ def test_model(model, env, dflog, simmode):
                 else:
                     action = torch.tensor([0], dtype=torch.int64, device=device)
         # print(f"selected_action: {selected_action}")
-        next_state, reward_inst, terminated, truncated, info = env.step(action.item())
+        next_state, reward_inst, _, _, info = env.step(action.item())
         # print(f"next_state: {next_state}")
         reward += reward_inst
         # info and reward_inst to dataframe
-        df_misc = pd.DataFrame(data=[[i, action.item(), reward_inst, reward]])
-        df_data = pd.DataFrame(data=[next_state])
+        df1 = pd.DataFrame(data=[[action.item(), env.leftbuffers, env.consumed_energy, env.current_aoi.max(), env.current_aoi.mean()]],
+                           columns=['action', 'left_buffer', 'consumed_energy', 'aoi_max', 'aoi_mean'],
+                           index=[epoch])
+        # df_misc = pd.DataFrame(data=[[i, action.item(), reward_inst, reward]])
+        # df_data = pd.DataFrame(data=[next_state])
         # df_data = pd.DataFrame(data=[info.values()], columns=info.keys())
-        df1 = pd.concat([df_misc, df_data], axis=1)
-        df = pd.concat([df, df1], axis=0, ignore_index=True)
+        # df1 = pd.concat([df_misc, df_data], axis=1)
+        df = pd.concat([df, df1], axis=0)
     # Convert list_all to dataframe
     # df = pd.DataFrame(data=list_all, columns=['epoch', 'action', 'reward_inst', 'reward_sum', 'inbuffer_nodes', 'channel_quality', 'current_aois', 'inbuffer_timestamps'])
     return df, reward
@@ -68,12 +71,38 @@ policy_net_deepaaqm.eval()
 # policy_net_rlaqm = torch.load("rlaqm.pt")
 
 # Test loop
-dflog = ra.randomaccess(NUMNODES, BEACONINTERVAL, FRAMETXSLOT, PER, 'CSMA')
-dflog = dflog[dflog['result'] == 'succ']
-dflog = dflog.reset_index(drop=True)
-df, rewards = test_model(model=policy_net_deepaaqm, env=test_env, dflog=dflog, simmode="deepaaqm")
-filename = "deepaaqm" + "_test_log.csv"
-df.to_csv(filename)
+for iter in range(1):
+    print(f"iter: {iter}")
+    dflog = ra.randomaccess(NUMNODES, BEACONINTERVAL, FRAMETXSLOT, PER, 'CSMA')
+    dflog = dflog[dflog['result'] == 'succ']
+    dflog = dflog.reset_index(drop=True)
+    rewards = np.zeros([2, 100])
+    for i, simmode in enumerate(['deepaaqm', 'sred']):
+        df, reward = test_model(model=policy_net_deepaaqm, env=test_env, dflog=dflog, simmode=simmode)
+        # filename = simmode + "_test_log.csv"
+        # df.to_csv(filename)
+        print(f"algorithm: {simmode}, reward: {reward}")
+        rewards[i, iter] = reward
+
+print(rewards)
+        
+    #     # Plot rewards
+    #     plt.figure()
+    #     plt.clf()
+    #     rewards_t = torch.tensor(reward, dtype=torch.float)
+    #     plt.xlabel('Episode #')
+    #     plt.ylabel('Return')
+    #     plt.plot(rewards_t.numpy())
+
+    #     means = rewards_t.unfold(0, 20, 1).mean(1).view(-1)
+    #     means = torch.cat((torch.zeros(19), means))
+    #     plt.plot(means.numpy())
+    #     # Save plot into files
+    #     filename = simmode + "_test_rewards.png"
+    #     plt.savefig(filename)
+
+    # plt.show()
+
 
 # for simmode in ["deepaaqm", "red", "rlaqm"]:
 #     dflog = ra.randomaccess(NUMNODES, BEACONINTERVAL, FRAMETXSLOT, PER, 'CSMA')
@@ -84,19 +113,4 @@ df.to_csv(filename)
 #     filename = simmode + "_test_log.csv"
 #     df.to_csv(filename)
 
-#     # Plot rewards
-#     plt.figure()
-#     plt.clf()
-#     rewards_t = torch.tensor(rewards, dtype=torch.float)
-#     plt.xlabel('Episode #')
-#     plt.ylabel('Return')
-#     plt.plot(rewards_t.numpy())
 
-#     means = rewards_t.unfold(0, 20, 1).mean(1).view(-1)
-#     means = torch.cat((torch.zeros(19), means))
-#     plt.plot(means.numpy())
-#     # Save plot into files
-#     filename = simmode + "_test_rewards.png"
-#     plt.savefig(filename)
-
-# plt.show()
