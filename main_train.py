@@ -136,7 +136,7 @@ def optimize_model():
     torch.nn.utils.clip_grad_value_(policy_net.parameters(), 100)
     optimizer.step()
     
-num_episodes = 10000
+num_episodes = 1000
 
 for i_episode in range(num_episodes):
     # Initialize the environment and state
@@ -145,13 +145,11 @@ for i_episode in range(num_episodes):
     dflog = dflog.reset_index(drop=True)
     state, info = env.reset()
     state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
+    print(f"Episode: {i_episode}/{num_episodes}")
         
     for epoch in range(BEACONINTERVAL//TIMEEPOCH):
-        print(f"Episode: {i_episode}/{num_episodes}, Epoch: {epoch}/{BEACONINTERVAL//TIMEEPOCH}")
         # Select and perform an action
         action = select_action(state)
-        # print(f"State: {info}, Action: {action}")
-
         env.probenqueue(dflog)
         observation, reward, terminated, truncated, info = env.step(action.item())
         reward = torch.tensor([reward], device=device)
@@ -179,6 +177,7 @@ for i_episode in range(num_episodes):
             target_net_state_dict[key] = policy_net_state_dict[key]*0.005 + target_net_state_dict[key]*(1-0.005)
         target_net.load_state_dict(target_net_state_dict)
         
+        print(f"Episode: {i_episode}/{num_episodes}, Epoch: {epoch}/{BEACONINTERVAL//TIMEEPOCH}, Action: {action}, Reward: {reward}")
         
         if done:
             episode_rewards.append(reward)

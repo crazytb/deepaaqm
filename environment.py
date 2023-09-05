@@ -14,7 +14,7 @@ learning_rate = 0.0001
 gamma = 1
 
 # Parameters
-BUFFERSIZE = 10  # Def. 10
+BUFFERSIZE = 5  # Def. 10
 NUMNODES = 10
 DIMSTATES = 2 * NUMNODES + 1
 TIMEEPOCH = 300  # microseconds
@@ -49,13 +49,13 @@ class DQN(nn.Module):
         super(DQN, self).__init__()
         self.layer1 = nn.Linear(n_observations, round(n_observations/2))
         self.layer2 = nn.Linear(round(n_observations/2), round(n_observations/2))
-        self.layer4 = nn.Linear(round(n_observations/2), n_actions)
+        self.layer3 = nn.Linear(round(n_observations/2), n_actions)
     # Called with either one element to determine next action, or a batch
     # during optimization. Returns tensor([[left0exp,right0exp]...]).
     def forward(self, x):
         x = F.relu(self.layer1(x))
         x = F.relu(self.layer2(x))
-        return self.layer4(x)
+        return self.layer3(x)
 
 
 class ShowerEnv(Env):
@@ -69,7 +69,7 @@ class ShowerEnv(Env):
         self.observation_space = spaces.Dict({
             "channel_quality": spaces.Discrete(self.max_channel_quality),
             "current_aois": spaces.Box(low=0, high=1, shape=(1, NUMNODES)),
-            "inbuffer_nodes": spaces.MultiDiscrete([NUMNODES] * BUFFERSIZE),
+            "inbuffer_nodes": spaces.MultiBinary([NUMNODES, BUFFERSIZE]),
             "inbuffer_timestamps": spaces.Box(low=0, high=1, shape=(1, BUFFERSIZE)),
         })
         
@@ -108,7 +108,7 @@ class ShowerEnv(Env):
         flattened = np.array([])
         for v in list(dict.values()):
             if isinstance(v, np.ndarray):
-                flattened = np.concatenate([flattened, v])
+                flattened = np.concatenate([flattened, np.squeeze(np.reshape(v, [1, v.size]))])
             else:
                 flattened = np.concatenate([flattened, np.array([v])])
         return flattened
@@ -143,11 +143,14 @@ class ShowerEnv(Env):
     
         return channel_quality
     
+    def _is_buffer_empty(self):
+        return self.inbuffer_nodes.sum(axis=0)[0] == 0
+    
     def reset(self, seed=None):
         super().reset(seed=seed)
         self.channel_quality = self.rng.integers(0, self.max_channel_quality)
         self.current_aoi = np.zeros(NUMNODES, dtype=float)
-        self.inbuffer_nodes = np.zeros(BUFFERSIZE, dtype=int)
+        self.inbuffer_nodes = np.zeros([NUMNODES, BUFFERSIZE], dtype=int)
         self.inbuffer_timestamps = np.zeros(BUFFERSIZE, dtype=float)
         
         self.leftslots = round(BEACONINTERVAL / TIMEEPOCH)
@@ -168,19 +171,29 @@ class ShowerEnv(Env):
         cond = (dflog.time >= self.currenttime*BEACONINTERVAL - TIMEEPOCH) & (dflog.time < self.currenttime*BEACONINTERVAL)
         
         # Extract target dflog
+        self.leftbuffers = BUFFERSIZE - np.count_nonzero(self.inbuffer_timestamps)
         targetdflog = dflog[cond][:self.leftbuffers]
         tnodenumber = len(targetdflog)
-        self.leftbuffers = BUFFERSIZE - tnodenumber
+        self.leftbuffers -= tnodenumber
 
         if tnodenumber == 0:
             pass
         else:
-            enquenodeentrytime = targetdflog.time.values.astype(int)
             enquenode = targetdflog.node.values.astype(int)
             enquenodetimestamp = targetdflog.timestamp.values.astype(int)
 
-            self._fill_first_zero(self.inbuffer_nodes, enquenode)
-            self._fill_first_zero(self.inbuffer_timestamps, enquenodetimestamp / BEACONINTERVAL)
+            repetitions = min((self.inbuffer_nodes.sum(axis=0)==0).sum(), tnodenumber)
+            if repetitions != 0:
+                insert_index = np.argwhere(self.inbuffer_nodes.sum(axis=1)==0)[0][0]
+            
+            for i in range(repetitions):
+                arr = np.zeros(NUMNODES, dtype=int)
+                arr[enquenode[i]] = 1
+                self.inbuffer_nodes[:, insert_index] = arr
+                self.inbuffer_timestamps[insert_index] = enquenodetimestamp[i] / BEACONINTERVAL
+                insert_index += 1
+            # self._fill_first_zero(self.inbuffer_nodes, enquenode)
+            # self._fill_first_zero(self.inbuffer_timestamps, enquenodetimestamp / BEACONINTERVAL)
             
         self.info = self._get_obs()
         self.current_obs = self._flatten_dict_values(self.info)
@@ -189,35 +202,35 @@ class ShowerEnv(Env):
         reward = 0
         # 0: FORWARD
         if action == 0:
-            if self.inbuffer_nodes[0] == 0:
+            if self._is_buffer_empty():
                 pass
             else:
-                dequenode = self.inbuffer_nodes[0] - 1
+                dequenode = np.nonzero(self.inbuffer_nodes[:, 0])[0]
                 dequenodeaoi = self.currenttime - self.inbuffer_timestamps[0]
                 
                 if self.channel_quality == 0:
                     self.current_aoi[dequenode] = dequenodeaoi
                 
                 # Left-shift bufferinfo
-                self.inbuffer_nodes[:-1] = self.inbuffer_nodes[1:]
+                self.inbuffer_nodes[:, :-1] = self.inbuffer_nodes[:, 1:]
                 self.inbuffer_nodes[-1] = 0
                 self.inbuffer_timestamps[:-1] = self.inbuffer_timestamps[1:]
                 self.inbuffer_timestamps[-1] = 0
                 self.leftbuffers += 1
-                reward -= 0.352
+                reward -= 0.0352
 
         # 1: DISCARD
         elif action == 1:
-            if self.inbuffer_nodes[0] == 0:
+            if self._is_buffer_empty():
                 pass
             else:
                 # Left-shift bufferinfo
-                self.inbuffer_nodes[:-1] = self.inbuffer_nodes[1:]
+                self.inbuffer_nodes[:, :-1] = self.inbuffer_nodes[:, 1:]
                 self.inbuffer_nodes[-1] = 0
                 self.inbuffer_timestamps[:-1] = self.inbuffer_timestamps[1:]
                 self.inbuffer_timestamps[-1] = 0
                 self.leftbuffers += 1
-                reward -= 0.154
+                reward -= 0.0154
 
         # 2: SKIP
         elif action == 2:
