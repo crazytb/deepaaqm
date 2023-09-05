@@ -217,7 +217,7 @@ class ShowerEnv(Env):
                 self.inbuffer_timestamps[:-1] = self.inbuffer_timestamps[1:]
                 self.inbuffer_timestamps[-1] = 0
                 self.leftbuffers += 1
-                reward -= 0.0352
+                reward -= 0.352
 
         # 1: DISCARD
         elif action == 1:
@@ -230,7 +230,7 @@ class ShowerEnv(Env):
                 self.inbuffer_timestamps[:-1] = self.inbuffer_timestamps[1:]
                 self.inbuffer_timestamps[-1] = 0
                 self.leftbuffers += 1
-                reward -= 0.0154
+                reward -= 0.154
 
         # 2: SKIP
         elif action == 2:

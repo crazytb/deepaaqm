@@ -52,12 +52,13 @@ def test_model(model, env, dflog, simmode):
         # print(f"next_state: {next_state}")
         reward += reward_inst
         # info and reward_inst to dataframe
-        df_misc = pd.DataFrame(data=[[i, action.item(), reward_inst, reward]], 
-                            columns=['epoch', 'action', 'reward_inst', 'reward'])
-        df_data = pd.DataFrame(data=[info.values()], columns=info.keys())
-        
+        df_misc = pd.DataFrame(data=[[i, action.item(), reward_inst, reward]])
+        df_data = pd.DataFrame(data=[next_state])
+        # df_data = pd.DataFrame(data=[info.values()], columns=info.keys())
         df1 = pd.concat([df_misc, df_data], axis=1)
-        df = pd.concat([df, df1], axis=0)
+        df = pd.concat([df, df1], axis=0, ignore_index=True)
+    # Convert list_all to dataframe
+    # df = pd.DataFrame(data=list_all, columns=['epoch', 'action', 'reward_inst', 'reward_sum', 'inbuffer_nodes', 'channel_quality', 'current_aois', 'inbuffer_timestamps'])
     return df, reward
 
 # Define test env and test model    

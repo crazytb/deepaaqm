@@ -145,6 +145,7 @@ for i_episode in range(num_episodes):
     dflog = dflog.reset_index(drop=True)
     state, info = env.reset()
     state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
+    rewards = 0
     print(f"Episode: {i_episode}/{num_episodes}")
         
     for epoch in range(BEACONINTERVAL//TIMEEPOCH):
@@ -179,8 +180,9 @@ for i_episode in range(num_episodes):
         
         print(f"Episode: {i_episode}/{num_episodes}, Epoch: {epoch}/{BEACONINTERVAL//TIMEEPOCH}, Action: {action}, Reward: {reward}")
         
+        rewards += reward.item()
         if done:
-            episode_rewards.append(reward)
+            episode_rewards.append(rewards)
             plot_rewards()
     
 print('Complete')
