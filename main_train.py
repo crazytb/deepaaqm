@@ -25,10 +25,10 @@ if is_ipython:
     from IPython import display
 plt.ion()
 
-RAALGO = 'CSMA'
+RAALGO = 'slottedaloha'
 
 forwardprobability = 0.5
-writing = 1
+writing = 0
 p_sred = 0
 p_max = 0.15
 totaltime = 0
@@ -136,7 +136,7 @@ def optimize_model():
     torch.nn.utils.clip_grad_value_(policy_net.parameters(), 100)
     optimizer.step()
     
-num_episodes = 1000
+num_episodes = 100
 
 for i_episode in range(num_episodes):
     # Initialize the environment and state
@@ -178,9 +178,10 @@ for i_episode in range(num_episodes):
             target_net_state_dict[key] = policy_net_state_dict[key]*0.005 + target_net_state_dict[key]*(1-0.005)
         target_net.load_state_dict(target_net_state_dict)
         
-        print(f"Episode: {i_episode}/{num_episodes}, Epoch: {epoch}/{BEACONINTERVAL//TIMEEPOCH}, Action: {action}, Reward: {reward}")
+        print(f"Episode: {i_episode}/{num_episodes}, Epoch: {epoch}/{BEACONINTERVAL//TIMEEPOCH}, Action: {action.item()}, Reward: {reward.item()}")
         
         rewards += reward.item()
+        
         if done:
             episode_rewards.append(rewards)
             plot_rewards()
@@ -188,10 +189,15 @@ for i_episode in range(num_episodes):
 print('Complete')
 plot_rewards(show_result=True)
 plt.ioff()
+
+# Save plot
+plt.savefig('result.png')
+
 plt.show()
 
+
 if writing == 1:
-    filename = f'policy_model_deepaaqm'
+    filename = f'policy_model_deepaaqm_{RAALGO}'
     torch.save(policy_net, filename + '.pt')
     
 

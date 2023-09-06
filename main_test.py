@@ -52,9 +52,8 @@ def test_model(model, env, dflog, simmode):
         # print(f"next_state: {next_state}")
         reward += reward_inst
         # info and reward_inst to dataframe
-        df1 = pd.DataFrame(data=[[action.item(), env.leftbuffers, env.consumed_energy, env.current_aoi.max(), env.current_aoi.mean()]],
-                           columns=['action', 'left_buffer', 'consumed_energy', 'aoi_max', 'aoi_mean'],
-                           index=[epoch])
+        df1 = pd.DataFrame(data=[[epoch, action.item(), env.leftbuffers, env.consumed_energy, env.current_aoi.max(), env.current_aoi.mean()]],
+                           columns=['epoch', 'action', 'left_buffer', 'consumed_energy', 'aoi_max', 'aoi_mean'])
         # df_misc = pd.DataFrame(data=[[i, action.item(), reward_inst, reward]])
         # df_data = pd.DataFrame(data=[next_state])
         # df_data = pd.DataFrame(data=[info.values()], columns=info.keys())
@@ -71,20 +70,24 @@ policy_net_deepaaqm.eval()
 # policy_net_rlaqm = torch.load("rlaqm.pt")
 
 # Test loop
-for iter in range(1):
+test_num = 10
+rewards = np.zeros([2, test_num])
+df_total = [pd.DataFrame() for x in range(2)]
+
+for iter in range(test_num):
     print(f"iter: {iter}")
     dflog = ra.randomaccess(NUMNODES, BEACONINTERVAL, FRAMETXSLOT, PER, 'CSMA')
     dflog = dflog[dflog['result'] == 'succ']
     dflog = dflog.reset_index(drop=True)
-    rewards = np.zeros([2, 100])
     for i, simmode in enumerate(['deepaaqm', 'sred']):
         df, reward = test_model(model=policy_net_deepaaqm, env=test_env, dflog=dflog, simmode=simmode)
-        # filename = simmode + "_test_log.csv"
-        # df.to_csv(filename)
         print(f"algorithm: {simmode}, reward: {reward}")
-        rewards[i, iter] = reward
+        df.insert(0, 'iteration', iter)
+        df_total[i] = pd.concat([df_total[i], df], axis=0)
 
-print(rewards)
+for i, simmode in enumerate(['deepaaqm', 'sred']):
+    filename = "test_log_" + simmode + ".csv"
+    df_total[i].to_csv(filename)
         
     #     # Plot rewards
     #     plt.figure()

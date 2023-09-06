@@ -14,8 +14,8 @@ learning_rate = 0.0001
 gamma = 1
 
 # Parameters
-BUFFERSIZE = 5  # Def. 10
-NUMNODES = 10
+BUFFERSIZE = 10  # Def. 10
+NUMNODES = 5
 DIMSTATES = 2 * NUMNODES + 1
 FRAMETIME = 270  # microseconds
 TIMEEPOCH = 300  # microseconds
@@ -186,7 +186,7 @@ class ShowerEnv(Env):
 
             repetitions = min((self.inbuffer_nodes.sum(axis=0)==0).sum(), tnodenumber)
             if repetitions != 0:
-                insert_index = np.argwhere(self.inbuffer_nodes.sum(axis=1)==0)[0][0]
+                insert_index = np.argwhere(self.inbuffer_nodes.sum(axis=0)==0)[0][0]
             
             for i in range(repetitions):
                 arr = np.zeros(NUMNODES, dtype=int)
