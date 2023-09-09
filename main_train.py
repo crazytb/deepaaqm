@@ -155,6 +155,7 @@ for i_episode in range(num_episodes):
         env.probenqueue(dflog)
         print(info)
         observation, reward, terminated, truncated, info = env.step(action.item())
+        # observation, reward, terminated, truncated, info = env.step_rlaqm(action.item(), dflog)
         reward = torch.tensor([reward], device=device)
         print(action.item(), info)
         

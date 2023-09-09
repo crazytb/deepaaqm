@@ -273,9 +273,66 @@ class ShowerEnv(Env):
         
         return self.current_obs, reward, False, done, self.info
 
-    def step_rlaqm(self, action, dflog, countindex, link_utilization):  # 여기 해야 함.
-        ...
+    def step_rlaqm(self, action, dflog):  # 여기 해야 함.
+        reward = 0
+        # 0: FORWARD
+        if action == 0:
+            if self._is_buffer_empty():
+                pass
+            else:
+                dequenode = self.inbuffer_info_node[0]
+                dequenodeaoi_timestamp = self.inbuffer_info_timestamp[0]
+                
+                if self.channel_quality == 0:
+                    self.current_aois[dequenode - 1] = self.current_time - (dequenodeaoi_timestamp/BEACONINTERVAL)
+                
+                # Left-shift bufferinfo
+                self.inbuffer_info_node[:-1] = self.inbuffer_info_node[1:]
+                self.inbuffer_info_node[-1] = 0
+                self.inbuffer_info_timestamp[:-1] = self.inbuffer_info_timestamp[1:]
+                self.inbuffer_info_timestamp[-1] = 0
+                self.leftbuffers += 1
+                self.insert_index -= 1
+            reward -= 0.308
+            self.consumed_energy += 280 * 1.1 * FRAMETIME    # milliamperes * voltage * time
 
+        # 1: DISCARD
+        elif action == 1:
+            if self._is_buffer_empty():
+                pass
+            else:
+                # Left-shift bufferinfo
+                self.inbuffer_info_node[:-1] = self.inbuffer_info_node[1:]
+                self.inbuffer_info_node[-1] = 0
+                self.inbuffer_info_timestamp[:-1] = self.inbuffer_info_timestamp[1:]
+                self.inbuffer_info_timestamp[-1] = 0
+                self.leftbuffers += 1
+                self.insert_index -= 1
+            reward -= 0.154
+            self.consumed_energy += 50 * 1.1 * FRAMETIME    # milliamperes * voltage * time
+
+        # 2: SKIP
+        elif action == 2:
+            pass
+        
+        self.node_location, self.node_aoi = self._get_node_info(self.inbuffer_info_node, self.inbuffer_info_timestamp)
+        self.channel_quality = self._change_channel_quality()
+        self.info = self._get_obs()
+        self.current_obs = self._flatten_dict_values(self.info)
+
+        self.leftslots -= 1
+        done = self.leftslots <= 0
+        
+        # Calculate link utilization
+        link_utilization = (len(dflog[dflog.time/BEACONINTERVAL < self.current_time]) * FRAMETIME) / (self.current_time * TIMEEPOCH)
+
+        # reward = (link_utilization**2 - 0.5) + (2/(1+(self.current_aois[self.current_aois != np.inf].mean()*BEACONINTERVAL/1000)/5) - 1.5)
+
+        return self.current_obs, reward, False, done, self.info
+    
+        
+
+    
     def render(self):
         # Implement viz
         pass

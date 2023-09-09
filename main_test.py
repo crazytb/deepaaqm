@@ -65,7 +65,7 @@ def test_model(model, env, dflog, simmode):
 
 # Test loop
 test_num = 10
-RAALGO = 'CSMA'
+RAALGO = 'slottedaloha'
 
 test_env = ShowerEnv()
 policy_net_deepaaqm = torch.load("policy_model_deepaaqm_" + RAALGO + ".pt")
@@ -86,7 +86,7 @@ for iter in range(test_num):
         df_total[i] = pd.concat([df_total[i], df], axis=0)
 
 for i, simmode in enumerate(['deepaaqm', 'sred']):
-    filename = "test_log_" + simmode + ".csv"
+    filename = "test_log_" + RAALGO + "_" + simmode + ".csv"
     df_total[i].to_csv(filename)
         
     #     # Plot rewards
