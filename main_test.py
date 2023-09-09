@@ -30,7 +30,7 @@ def test_model(model, env, dflog, simmode):
         # 0: Forward, 1: Discard, 2: Skip
         if simmode == "deepaaqm" or simmode == "rlaqm":
             action = model.forward(torch.tensor(next_state, dtype=torch.float32, device=device)).max(0)[1].view(1, 1)
-        # selected_action = 1 only if the channel quality is good
+        
         elif simmode == "sred":
             q_val = 1 - (env.leftbuffers / BUFFERSIZE)
             if 0 <= q_val <= 1/6:
@@ -52,7 +52,7 @@ def test_model(model, env, dflog, simmode):
         # print(f"next_state: {next_state}")
         reward += reward_inst
         # info and reward_inst to dataframe
-        df1 = pd.DataFrame(data=[[epoch, action.item(), env.leftbuffers, env.consumed_energy, env.current_aoi.max(), env.current_aoi.mean()]],
+        df1 = pd.DataFrame(data=[[epoch, action.item(), env.leftbuffers, env.consumed_energy, env.current_aois.max(), env.current_aois.mean()]],
                            columns=['epoch', 'action', 'left_buffer', 'consumed_energy', 'aoi_max', 'aoi_mean'])
         # df_misc = pd.DataFrame(data=[[i, action.item(), reward_inst, reward]])
         # df_data = pd.DataFrame(data=[next_state])
@@ -63,20 +63,20 @@ def test_model(model, env, dflog, simmode):
     # df = pd.DataFrame(data=list_all, columns=['epoch', 'action', 'reward_inst', 'reward_sum', 'inbuffer_nodes', 'channel_quality', 'current_aois', 'inbuffer_timestamps'])
     return df, reward
 
-# Define test env and test model    
-test_env = ShowerEnv()
-policy_net_deepaaqm = torch.load("policy_model_deepaaqm_keep.pt")
-policy_net_deepaaqm.eval()
-# policy_net_rlaqm = torch.load("rlaqm.pt")
-
 # Test loop
 test_num = 10
+RAALGO = 'slottedaloha'
+
+test_env = ShowerEnv()
+policy_net_deepaaqm = torch.load("policy_model_deepaaqm_" + RAALGO + ".pt")
+policy_net_deepaaqm.eval()
+
 rewards = np.zeros([2, test_num])
 df_total = [pd.DataFrame() for x in range(2)]
 
 for iter in range(test_num):
     print(f"iter: {iter}")
-    dflog = ra.randomaccess(NUMNODES, BEACONINTERVAL, FRAMETXSLOT, PER, 'CSMA')
+    dflog = ra.randomaccess(NUMNODES, BEACONINTERVAL, FRAMETXSLOT, PER, RAALGO)
     dflog = dflog[dflog['result'] == 'succ']
     dflog = dflog.reset_index(drop=True)
     for i, simmode in enumerate(['deepaaqm', 'sred']):
@@ -86,7 +86,7 @@ for iter in range(test_num):
         df_total[i] = pd.concat([df_total[i], df], axis=0)
 
 for i, simmode in enumerate(['deepaaqm', 'sred']):
-    filename = "test_log_" + simmode + ".csv"
+    filename = "test_log_" + RAALGO + "_" + simmode + ".csv"
     df_total[i].to_csv(filename)
         
     #     # Plot rewards
