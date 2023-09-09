@@ -265,20 +265,12 @@ class ShowerEnv(Env):
 
         self.leftslots -= 1
         done = self.leftslots <= 0
-
         
         # if self.current_aois.max() >= (PEAKAOITHRES / BEACONINTERVAL):
         reward -= np.clip(self.current_aois - (PEAKAOITHRES / BEACONINTERVAL), 0, None).sum()
         # count the number of nodes whose aoi is less than PEAKAOITHRES / BEACONINTERVAL
         reward += np.count_nonzero(self.current_aois < (PEAKAOITHRES / BEACONINTERVAL)) * (1/NUMNODES)
         
-        # if done:
-        #     print("Success!")
-        #     if self.current_aois.max() < (PEAKAOITHRES / BEACONINTERVAL):
-        #         print("Congrats!")
-        #         reward += 100
-            
-
         return self.current_obs, reward, False, done, self.info
 
     def step_rlaqm(self, action, dflog, countindex, link_utilization):  # 여기 해야 함.
