@@ -65,17 +65,34 @@ class ShowerEnv(Env):
         # Actions we can take FORWARD, DISCARD, and SKIP
         self.action_space = Discrete(3)
         self.max_channel_quality = 2
-        self.max_aois = 1
+        self.max_current_time = 0
+        self.max_current_aoi = 1
+        self.max_buffer_location = 1
         
         self.observation_space = spaces.Dict({
             "channel_quality": spaces.Discrete(self.max_channel_quality),
+            "current_time": spaces.Box(low=0, high=1, shape=(1, 1)),
             "current_aois": spaces.Box(low=0, high=1, shape=(1, NUMNODES)),
-            "inbuffer_nodes": spaces.MultiBinary([NUMNODES, BUFFERSIZE]),
-            "inbuffer_timestamps": spaces.Box(low=0, high=1, shape=(1, BUFFERSIZE)),
+            "node_location": spaces.MultiDiscrete([BUFFERSIZE] * NUMNODES),
+            "node_aoi": spaces.Box(low=0, high=1, shape=(1, NUMNODES)),
         })
         
+        self.inbuffer_info_node = np.zeros([BUFFERSIZE], dtype=int)
+        self.inbuffer_info_timestamp = np.zeros([BUFFERSIZE], dtype=float)
         self.rng = default_rng()
         self.current_obs = None
+
+    def _get_node_info(self, buffer_node_info, buffer_node_timestamp):
+        node_location = BUFFERSIZE * np.ones([NUMNODES], dtype=int)
+        node_aoi = np.zeros([NUMNODES], dtype=float)
+        for node_i in range(1, NUMNODES + 1):
+            try:
+                location = np.where(buffer_node_info == node_i)[0][0]
+                node_location[node_i - 1] = location
+                node_aoi[node_i - 1] = buffer_node_timestamp[location] / BEACONINTERVAL
+            except:
+                pass
+        return node_location, node_aoi
 
     def _stepfunc(self, thres, x):
         if x > thres:
@@ -86,9 +103,10 @@ class ShowerEnv(Env):
     def _get_obs(self):
         return {
             "channel_quality": self.channel_quality,
-            "current_aois": self.current_aoi,
-            "inbuffer_nodes": self.inbuffer_nodes,
-            "inbuffer_timestamps": self.inbuffer_timestamps,
+            "current_time": self.current_time,
+            "current_aois": self.current_aois,
+            "node_location": self.node_location,
+            "node_aoi": self.node_aoi,
         }
 
     def _fill_first_zero(self, arr1, arr2):
@@ -99,9 +117,9 @@ class ShowerEnv(Env):
         remaining_zeros = np.count_nonzero(arr1 == 0) - zero_index  # Calculate the number of remaining zeros after the first zero
         
         if remaining_zeros >= len(arr2):
-            arr1[zero_index:zero_index + len(arr2)] = arr2[:remaining_zeros]
+            arr1[0][zero_index:zero_index + len(arr2)] = arr2[:remaining_zeros]
         else:
-            arr1[zero_index:zero_index + remaining_zeros] = arr2[:remaining_zeros]
+            arr1[0][zero_index:zero_index + remaining_zeros] = arr2[:remaining_zeros]
 
         return arr1
 
@@ -145,19 +163,24 @@ class ShowerEnv(Env):
         return channel_quality
     
     def _is_buffer_empty(self):
-        return self.inbuffer_nodes.sum(axis=0)[0] == 0
+        return self.leftbuffers == BUFFERSIZE
     
     def reset(self, seed=None):
         super().reset(seed=seed)
+        # State reset
         self.channel_quality = self.rng.integers(0, self.max_channel_quality)
-        self.current_aoi = np.zeros(NUMNODES, dtype=float)
-        self.inbuffer_nodes = np.zeros([NUMNODES, BUFFERSIZE], dtype=int)
-        self.inbuffer_timestamps = np.zeros(BUFFERSIZE, dtype=float)
+        self.current_time = 0
+        self.current_aois = np.zeros([NUMNODES], dtype=float)
+        self.node_location = BUFFERSIZE * np.ones([NUMNODES], dtype=int)
+        self.node_aoi = np.zeros([NUMNODES], dtype=float)
         
         self.leftslots = round(BEACONINTERVAL / TIMEEPOCH)
         self.leftbuffers = BUFFERSIZE
-        self.currenttime = 0
+        self.current_time = 0
         self.consumed_energy = 0
+        self.inbuffer_info_node = np.zeros([BUFFERSIZE], dtype=int)
+        self.inbuffer_info_timestamp = np.zeros([BUFFERSIZE], dtype=int)
+        self.insert_index = 0
             
         self.info = self._get_obs()
         self.current_obs = self._flatten_dict_values(self.info)
@@ -166,16 +189,16 @@ class ShowerEnv(Env):
 
 
     def probenqueue(self, dflog):
-        self.currenttime += TIMEEPOCH / BEACONINTERVAL
-        self.current_aoi += TIMEEPOCH / BEACONINTERVAL
+        self.current_time += TIMEEPOCH / BEACONINTERVAL
+        self.current_aois += TIMEEPOCH / BEACONINTERVAL
         
         # Define condition that the elements of the dflog can enqueue.
-        cond = (dflog.time >= self.currenttime*BEACONINTERVAL - TIMEEPOCH) & (dflog.time < self.currenttime*BEACONINTERVAL)
+        cond = ((dflog.time >= self.current_time*BEACONINTERVAL - TIMEEPOCH) 
+                & (dflog.time < self.current_time*BEACONINTERVAL))
         
         # Extract target dflog
-        self.leftbuffers = BUFFERSIZE - np.count_nonzero(self.inbuffer_timestamps)
         targetdflog = dflog[cond][:self.leftbuffers]
-        tnodenumber = len(targetdflog)
+        tnodenumber = min(len(targetdflog), self.leftbuffers)
         self.leftbuffers -= tnodenumber
 
         if tnodenumber == 0:
@@ -184,18 +207,11 @@ class ShowerEnv(Env):
             enquenode = targetdflog.node.values.astype(int)
             enquenodetimestamp = targetdflog.timestamp.values.astype(int)
 
-            repetitions = min((self.inbuffer_nodes.sum(axis=0)==0).sum(), tnodenumber)
-            if repetitions != 0:
-                insert_index = np.argwhere(self.inbuffer_nodes.sum(axis=0)==0)[0][0]
-            
-            for i in range(repetitions):
-                arr = np.zeros(NUMNODES, dtype=int)
-                arr[enquenode[i]] = 1
-                self.inbuffer_nodes[:, insert_index] = arr
-                self.inbuffer_timestamps[insert_index] = enquenodetimestamp[i] / BEACONINTERVAL
-                insert_index += 1
-            # self._fill_first_zero(self.inbuffer_nodes, enquenode)
-            # self._fill_first_zero(self.inbuffer_timestamps, enquenodetimestamp / BEACONINTERVAL)
+            self.inbuffer_info_node[self.insert_index:self.insert_index + tnodenumber] = enquenode
+            self.inbuffer_info_timestamp[self.insert_index:self.insert_index + tnodenumber] = enquenodetimestamp
+            self.insert_index += tnodenumber
+
+            self.node_location, self.node_aoi = self._get_node_info(self.inbuffer_info_node, self.inbuffer_info_timestamp)
             
         self.info = self._get_obs()
         self.current_obs = self._flatten_dict_values(self.info)
@@ -207,20 +223,21 @@ class ShowerEnv(Env):
             if self._is_buffer_empty():
                 pass
             else:
-                dequenode = np.nonzero(self.inbuffer_nodes[:, 0])[0]
-                dequenodeaoi = self.currenttime - self.inbuffer_timestamps[0]
+                dequenode = self.inbuffer_info_node[0]
+                dequenodeaoi_timestamp = self.inbuffer_info_timestamp[0]
                 
                 if self.channel_quality == 0:
-                    self.current_aoi[dequenode] = dequenodeaoi
+                    self.current_aois[dequenode - 1] = self.current_time - (dequenodeaoi_timestamp/BEACONINTERVAL)
                 
                 # Left-shift bufferinfo
-                self.inbuffer_nodes[:, :-1] = self.inbuffer_nodes[:, 1:]
-                self.inbuffer_nodes[-1] = 0
-                self.inbuffer_timestamps[:-1] = self.inbuffer_timestamps[1:]
-                self.inbuffer_timestamps[-1] = 0
+                self.inbuffer_info_node[:-1] = self.inbuffer_info_node[1:]
+                self.inbuffer_info_node[-1] = 0
+                self.inbuffer_info_timestamp[:-1] = self.inbuffer_info_timestamp[1:]
+                self.inbuffer_info_timestamp[-1] = 0
                 self.leftbuffers += 1
-                reward -= 0.308
-                self.consumed_energy += 280 * 1.1 * FRAMETIME    # milliamperes * voltage * time
+                self.insert_index -= 1
+            reward -= 0.308
+            self.consumed_energy += 280 * 1.1 * FRAMETIME    # milliamperes * voltage * time
 
         # 1: DISCARD
         elif action == 1:
@@ -228,33 +245,36 @@ class ShowerEnv(Env):
                 pass
             else:
                 # Left-shift bufferinfo
-                self.inbuffer_nodes[:, :-1] = self.inbuffer_nodes[:, 1:]
-                self.inbuffer_nodes[-1] = 0
-                self.inbuffer_timestamps[:-1] = self.inbuffer_timestamps[1:]
-                self.inbuffer_timestamps[-1] = 0
+                self.inbuffer_info_node[:-1] = self.inbuffer_info_node[1:]
+                self.inbuffer_info_node[-1] = 0
+                self.inbuffer_info_timestamp[:-1] = self.inbuffer_info_timestamp[1:]
+                self.inbuffer_info_timestamp[-1] = 0
                 self.leftbuffers += 1
-                reward -= 0.154
-                self.consumed_energy += 50 * 1.1 * FRAMETIME    # milliamperes * voltage * time
+                self.insert_index -= 1
+            reward -= 0.154
+            self.consumed_energy += 50 * 1.1 * FRAMETIME    # milliamperes * voltage * time
 
         # 2: SKIP
         elif action == 2:
             pass
-
+        
+        self.node_location, self.node_aoi = self._get_node_info(self.inbuffer_info_node, self.inbuffer_info_timestamp)
         self.channel_quality = self._change_channel_quality()
         self.info = self._get_obs()
         self.current_obs = self._flatten_dict_values(self.info)
 
         self.leftslots -= 1
         done = self.leftslots <= 0
+
         
-        # if self.current_aoi.max() >= (PEAKAOITHRES / BEACONINTERVAL):
-        reward -= np.clip(self.current_aoi - (PEAKAOITHRES / BEACONINTERVAL), 0, None).sum()
+        # if self.current_aois.max() >= (PEAKAOITHRES / BEACONINTERVAL):
+        reward -= np.clip(self.current_aois - (PEAKAOITHRES / BEACONINTERVAL), 0, None).sum()
         # count the number of nodes whose aoi is less than PEAKAOITHRES / BEACONINTERVAL
-        reward += np.count_nonzero(self.current_aoi < (PEAKAOITHRES / BEACONINTERVAL)) * (1/NUMNODES)
+        reward += np.count_nonzero(self.current_aois < (PEAKAOITHRES / BEACONINTERVAL)) * (1/NUMNODES)
         
         # if done:
         #     print("Success!")
-        #     if self.current_aoi.max() < (PEAKAOITHRES / BEACONINTERVAL):
+        #     if self.current_aois.max() < (PEAKAOITHRES / BEACONINTERVAL):
         #         print("Congrats!")
         #         reward += 100
             

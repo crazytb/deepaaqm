@@ -8,6 +8,7 @@ from torch import nn, optim
 import random
 import matplotlib
 import matplotlib.pyplot as plt
+from gymnasium.wrappers import FlattenObservation
 
 from collections import namedtuple, deque
 from itertools import count, chain
@@ -146,14 +147,16 @@ for i_episode in range(num_episodes):
     state, info = env.reset()
     state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
     rewards = 0
-    print(f"Episode: {i_episode}/{num_episodes}")
         
     for epoch in range(BEACONINTERVAL//TIMEEPOCH):
         # Select and perform an action
         action = select_action(state)
+        print(info)
         env.probenqueue(dflog)
+        print(info)
         observation, reward, terminated, truncated, info = env.step(action.item())
         reward = torch.tensor([reward], device=device)
+        print(action.item(), info)
         
         done = terminated or truncated
         if done:
@@ -178,7 +181,7 @@ for i_episode in range(num_episodes):
             target_net_state_dict[key] = policy_net_state_dict[key]*0.005 + target_net_state_dict[key]*(1-0.005)
         target_net.load_state_dict(target_net_state_dict)
         
-        print(f"Episode: {i_episode}/{num_episodes}, Epoch: {epoch}/{BEACONINTERVAL//TIMEEPOCH}, Action: {action.item()}, Reward: {reward.item()}")
+        # print(f"Episode: {i_episode}/{num_episodes}, Epoch: {epoch}/{BEACONINTERVAL//TIMEEPOCH}, Action: {action.item()}, Reward: {reward.item()}")
         
         rewards += reward.item()
         
