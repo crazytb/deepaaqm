@@ -27,6 +27,13 @@ def test_model(model, env, dflog, simmode):
     reward = 0
     for epoch in range(BEACONINTERVAL//TIMEEPOCH):
         env.probenqueue(dflog)
+        
+        # Codel parameters
+        target_delay = 500    # microseconds
+        interval_delay = 10000 / BEACONINTERVAL
+        timer = 0
+        dropping_state = False
+        
         # 0: Forward, 1: Discard, 2: Skip
         if simmode == "deepaaqm" or simmode == "rlaqm":
             action = model.forward(torch.tensor(next_state, dtype=torch.float32, device=device)).max(0)[1].view(1, 1)
@@ -47,20 +54,37 @@ def test_model(model, env, dflog, simmode):
                     action = torch.tensor([1], dtype=torch.int64, device=device)
                 else:
                     action = torch.tensor([0], dtype=torch.int64, device=device)
+                    
+        elif simmode == "codel":
+            
+            if (dropping_state == True
+                and env.inbuffer_info_node[0] != 0
+                and env.current_time - env.inbuffer_info_timestamp[0]/BEACONINTERVAL):
+            
+            
+            
+            if env.inbuffer_info_node[0] != 0:
+                departure_time = env.inbuffer_info_timestamp[0]
+            
+            
+            
+            if env.inbuffer_info_timestamp[0] < target_delay:
+                action = torch.tensor([0], dtype=torch.int64, device=device)
+            else:
+                action = torch.tensor([0], dtype=torch.int64, device=device)
+                timer += TIMEEPOCH 
+                
+        
         # print(f"selected_action: {selected_action}")
         next_state, reward_inst, _, _, info = env.step(action.item())
+        
         # print(f"next_state: {next_state}")
         reward += reward_inst
+        
         # info and reward_inst to dataframe
         df1 = pd.DataFrame(data=[[epoch, action.item(), env.leftbuffers, env.consumed_energy, env.current_aois.max(), env.current_aois.mean()]],
                            columns=['epoch', 'action', 'left_buffer', 'consumed_energy', 'aoi_max', 'aoi_mean'])
-        # df_misc = pd.DataFrame(data=[[i, action.item(), reward_inst, reward]])
-        # df_data = pd.DataFrame(data=[next_state])
-        # df_data = pd.DataFrame(data=[info.values()], columns=info.keys())
-        # df1 = pd.concat([df_misc, df_data], axis=1)
         df = pd.concat([df, df1], axis=0)
-    # Convert list_all to dataframe
-    # df = pd.DataFrame(data=list_all, columns=['epoch', 'action', 'reward_inst', 'reward_sum', 'inbuffer_nodes', 'channel_quality', 'current_aois', 'inbuffer_timestamps'])
     return df, reward
 
 # Test loop
