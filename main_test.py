@@ -12,13 +12,65 @@ import matplotlib.pyplot as plt
 from collections import namedtuple, deque
 from itertools import count, chain
 
-# import csv
-
 if torch.cuda.is_available():
     device = torch.device("cuda")
 elif torch.backends.mps.is_available():
     device = torch.device("mps")  
 print("device: ", device)
+
+# Codel functions
+# https://queue.acm.org/appendices/codel.html
+def get_first_above_time_and_ok_to_drop(env, target_delay, interval_delay) -> (float, bool):
+    ok_to_drop = False
+    if env.inbuffer_info_node[0] == 0:
+        first_above_time = 0
+    else:
+        sojourn_time = env.current_time - env.inbuffer_info_timestamp[0]
+        if sojourn_time < target_delay:
+            first_above_time = 0
+        else:
+            if first_above_time == 0:
+                first_above_time = env.current_time + interval_delay
+            elif env.current_time >= first_above_time:
+                ok_to_drop = True
+    return first_above_time, ok_to_drop
+
+def get_next_drop_time(current_time, interval_delay, drop_count) -> float:
+    return current_time + interval_delay / (drop_count**(1/2))
+
+def do_deque(env, interval_delay, first_above_time, next_drop, drop_count, dropping_state, ok_to_drop) -> int:    # (dropping action)
+    if env.inbuffer_info_node[0] == 0:
+        dropping_state = False
+        return 2    # Leave
+    elif dropping_state:
+        if ok_to_drop == False:
+            # Sojourn time is below target_delay
+            dropping_state = False
+            return 0    # Forward
+        elif env.current_time >= next_drop:
+            if dropping_state:
+                drop_count += 1
+                if not ok_to_drop:
+                    # Leave dropping state
+                    dropping_state = False
+                else:
+                    # Schedule the next drop time
+                    next_drop = get_next_drop_time(env.current_time, interval_delay, drop_count)
+            return 1    # Drop
+    elif ((ok_to_drop == True) 
+          and ((env.current_time - next_drop < interval_delay)
+          or (env.current_time - first_above_time >= interval_delay))):
+        dropping_state = True
+        if (env.current_time - next_drop < interval_delay):
+            drop_count = drop_count - 2 if drop_count > 2 else 1
+        else:
+            drop_count = 1
+        next_drop = get_next_drop_time(env.current_time, interval_delay, drop_count)
+        return 1    # Drop
+    else:
+        return 0
+                
+
 
 # Make test model for one episode
 def test_model(model, env, dflog, simmode):
@@ -31,8 +83,9 @@ def test_model(model, env, dflog, simmode):
         # Codel parameters
         target_delay = 500    # microseconds
         interval_delay = 10000 / BEACONINTERVAL
-        timer = 0
+        next_drop = interval_delay
         dropping_state = False
+        drop_count = 1
         
         # 0: Forward, 1: Discard, 2: Skip
         if simmode == "deepaaqm" or simmode == "rlaqm":
@@ -56,24 +109,9 @@ def test_model(model, env, dflog, simmode):
                     action = torch.tensor([0], dtype=torch.int64, device=device)
                     
         elif simmode == "codel":
-            
-            if (dropping_state == True
-                and env.inbuffer_info_node[0] != 0
-                and env.current_time - env.inbuffer_info_timestamp[0]/BEACONINTERVAL):
-            
-            
-            
-            if env.inbuffer_info_node[0] != 0:
-                departure_time = env.inbuffer_info_timestamp[0]
-            
-            
-            
-            if env.inbuffer_info_timestamp[0] < target_delay:
-                action = torch.tensor([0], dtype=torch.int64, device=device)
-            else:
-                action = torch.tensor([0], dtype=torch.int64, device=device)
-                timer += TIMEEPOCH 
-                
+            first_above_time, ok_to_drop = get_first_above_time_and_ok_to_drop(env, target_delay, interval_delay)
+            action = do_deque(env, interval_delay, first_above_time, next_drop, drop_count, dropping_state, ok_to_drop)
+            action = torch.tensor([action], dtype=torch.int64, device=device)    
         
         # print(f"selected_action: {selected_action}")
         next_state, reward_inst, _, _, info = env.step(action.item())
@@ -90,26 +128,28 @@ def test_model(model, env, dflog, simmode):
 # Test loop
 test_num = 10
 RAALGO = 'slottedaloha'
+aqm_algorithms = ['deepaaqm', 'sred', 'codel']
 
 test_env = ShowerEnv()
+test_env.reset()
 policy_net_deepaaqm = torch.load("policy_model_deepaaqm_" + RAALGO + ".pt")
 policy_net_deepaaqm.eval()
 
 rewards = np.zeros([2, test_num])
-df_total = [pd.DataFrame() for x in range(2)]
+df_total = [pd.DataFrame() for x in range(len(aqm_algorithms))]
 
 for iter in range(test_num):
     print(f"iter: {iter}")
     dflog = ra.randomaccess(NUMNODES, BEACONINTERVAL, FRAMETXSLOT, PER, RAALGO)
     dflog = dflog[dflog['result'] == 'succ']
     dflog = dflog.reset_index(drop=True)
-    for i, simmode in enumerate(['deepaaqm', 'sred']):
+    for i, simmode in enumerate(aqm_algorithms):
         df, reward = test_model(model=policy_net_deepaaqm, env=test_env, dflog=dflog, simmode=simmode)
         print(f"algorithm: {simmode}, reward: {reward}")
         df.insert(0, 'iteration', iter)
         df_total[i] = pd.concat([df_total[i], df], axis=0)
 
-for i, simmode in enumerate(['deepaaqm', 'sred']):
+for i, simmode in enumerate(aqm_algorithms):
     filename = "test_log_" + RAALGO + "_" + simmode + ".csv"
     df_total[i].to_csv(filename)
         
@@ -140,4 +180,18 @@ for i, simmode in enumerate(['deepaaqm', 'sred']):
 #     filename = simmode + "_test_log.csv"
 #     df.to_csv(filename)
 
-
+# Draw a histogram plot for each algorithm using the 'aoi_max' column of df_total in one figure.
+plt.figure()
+plt.clf()
+plt.xlabel('Max AoI')
+plt.ylabel('Frequency')
+plt.axvline(x=PEAKAOITHRES/BEACONINTERVAL, color='blue', linestyle='solid')
+for i, simmode in enumerate(aqm_algorithms):
+    counts, bins = np.histogram(df_total[i]['aoi_max'], bins=100)
+    cdf = np.cumsum(counts)/np.sum(counts)
+    plt.plot(bins[:-1], cdf, label=simmode)
+    # plt.hist(df_total[i]['aoi_max'], bins=100, label=simmode, cumulative=True, histtype="step")
+    # filename = "test_log_" + RAALGO + "_" + simmode + ".png"
+    # plt.savefig(filename)
+plt.legend()
+plt.show()

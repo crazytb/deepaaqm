@@ -1,0 +1,50 @@
+packet_t* codel_queue_t::deque()
+{
+      time_t now = clock();
+      dodeque_result r = dodeque();
+      if (r.p == NULL) 
+      {
+        // an empty queue takes us out of dropping state
+            dropping = 0;
+            return r.p;
+      }
+      if (dropping) 
+      {
+            if (! r.ok_to_drop) 
+            {
+                  // sojourn time below target - leave dropping state
+                  dropping = 0;
+            } 
+            else if (now >= drop_next) 
+            {
+                  while (now >= drop_next && dropping) 
+                  {
+                        drop(r.p);
+                        ++count;
+                        r = dodeque();
+                        if (! r.ok_to_drop)
+                              // leave dropping state
+                              dropping = 0;
+                        else
+                              // schedule the next drop.
+                              drop_next = control_law(drop_next);
+                  }
+            }
+      } 
+      else if (r.ok_to_drop &&
+            ((now - drop_next < interval) ||
+            (now - first_above_time >= interval))) {
+            drop(r.p);
+            r = dodeque();
+            dropping = 1;
+
+            // If we're in a drop cycle, the drop rate that controlled the queue
+            // on the last cycle is a good starting point to control it now.
+            if (now - drop_next < interval)
+                  count = count>2? count-2 : 1;
+            else
+                  count = 1;
+            drop_next = control_law(now);
+      }
+      return (r.p);
+}
