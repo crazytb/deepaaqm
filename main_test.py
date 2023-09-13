@@ -127,7 +127,7 @@ def test_model(model, env, dflog, simmode):
 
 # Test loop
 test_num = 100
-RAALGO = 'slottedaloha'
+RAALGO = 'CSMA'
 aqm_algorithms = ['deepaaqm', 'sred', 'codel']
 
 test_env = ShowerEnv()
