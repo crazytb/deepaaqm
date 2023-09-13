@@ -180,8 +180,13 @@ for i, simmode in enumerate(aqm_algorithms):
 #     filename = simmode + "_test_log.csv"
 #     df.to_csv(filename)
 
+# Make a dataframe for each algorithm
+consumed_energy = pd.DataFrame(columns=aqm_algorithms)
+for i, simmode in enumerate(aqm_algorithms):
+    consumed_energy[simmode] = df_total[i][df_total[i].epoch==BEACONINTERVAL//TIMEEPOCH-1]['consumed_energy']/BEACONINTERVAL
+
 # Draw a histogram plot for each algorithm using the 'aoi_max' column of df_total in one figure.
-plt.figure()
+plt.figure(1)
 plt.clf()
 plt.xlabel('Max AoI')
 plt.ylabel('Frequency')
@@ -190,8 +195,34 @@ for i, simmode in enumerate(aqm_algorithms):
     counts, bins = np.histogram(df_total[i]['aoi_max'], bins=100)
     cdf = np.cumsum(counts)/np.sum(counts)
     plt.plot(bins[:-1], cdf, label=simmode)
-    # plt.hist(df_total[i]['aoi_max'], bins=100, label=simmode, cumulative=True, histtype="step")
-    # filename = "test_log_" + RAALGO + "_" + simmode + ".png"
-    # plt.savefig(filename)
 plt.legend()
+plt.savefig("test_log_" + RAALGO + "_aoi_max.png")
 plt.show()
+
+# Draw a histogram plot for each algorithm using the 'aoi_mean' column of df_total in one figure.
+plt.figure(2)
+plt.clf()
+plt.xlabel('Mean AoI')
+plt.ylabel('Frequency')
+plt.axvline(x=PEAKAOITHRES/BEACONINTERVAL, color='blue', linestyle='solid')
+for i, simmode in enumerate(aqm_algorithms):
+    counts, bins = np.histogram(df_total[i]['aoi_mean'], bins=100)
+    cdf = np.cumsum(counts)/np.sum(counts)
+    plt.plot(bins[:-1], cdf, label=simmode)
+plt.legend()
+plt.savefig("test_log_" + RAALGO + "_aoi_mean.png")
+plt.show()
+
+# Draw a histogram plot for each algorithm using the 'left_buffer' column of df_total in one figure.
+plt.figure(3)
+plt.clf()
+plt.xlabel('Left Buffer')
+plt.ylabel('Frequency')
+for i, simmode in enumerate(aqm_algorithms):
+    counts, bins = np.histogram(df_total[i]['left_buffer'], bins=100)
+    cdf = np.cumsum(counts)/np.sum(counts)
+    plt.plot(bins[:-1], cdf, label=simmode)
+plt.legend()
+plt.savefig("test_log_" + RAALGO + "_left_buffer.png")
+plt.show()
+
