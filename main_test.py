@@ -126,7 +126,7 @@ def test_model(model, env, dflog, simmode):
     return df, reward
 
 # Test loop
-test_num = 10
+test_num = 100
 RAALGO = 'slottedaloha'
 aqm_algorithms = ['deepaaqm', 'sred', 'codel']
 
@@ -226,3 +226,7 @@ plt.legend()
 plt.savefig("test_log_" + RAALGO + "_left_buffer.png")
 plt.show()
 
+# Save the dataframe df_total into a csv file
+for i, simmode in enumerate(aqm_algorithms):
+    filename = "test_log_" + RAALGO + "_" + simmode + ".csv"
+    df_total[i].to_csv(filename)
