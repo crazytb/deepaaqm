@@ -20,14 +20,14 @@ DIMSTATES = 2 * NUMNODES + 1
 FRAMETIME = 270  # microseconds
 TIMEEPOCH = 300  # microseconds
 FRAMETXSLOT = 30
-BEACONINTERVAL = 100_000  # microseconds
+BEACONINTERVAL = 100000  # microseconds
 # MAXAOI = int(np.ceil(BEACONINTERVAL / TIMEEPOCH))
 ACCESSPROB = 1 / NUMNODES
 # ACCESSPROB = 1
 POWERCOEFF = 1
 AOIPENALTY = 1
-PER = 0.1
-PEAKAOITHRES = 20_000   # That is, 5 000 for 5ms, (5,20)
+PER = 0
+PEAKAOITHRES = 20000   # That is, 5 000 for 5ms, (5,20)
 
 
 Transition = namedtuple('Transition',
@@ -182,8 +182,8 @@ class ShowerEnv(Env):
         self.inbuffer_info_timestamp = np.zeros([BUFFERSIZE], dtype=int)
         self.insert_index = 0
             
-        self.info = self._get_obs()
-        self.current_obs = self._flatten_dict_values(self.info)
+        self.current_obs = self._get_obs()
+        self.info = self._flatten_dict_values(self.current_obs)
 
         return self.current_obs, self.info
 
@@ -254,18 +254,14 @@ class ShowerEnv(Env):
             reward -= 0.154
             self.consumed_energy += 50 * 1.1 * FRAMETIME    # milliamperes * voltage * time
 
-        # 2: FLUSH
+        # 2: SKIP
         elif action == 2:
-            # Flush all buffers
-            self.inbuffer_info_node.fill(0)
-            self.inbuffer_info_timestamp.fill(0)
-            self.leftbuffers = BUFFERSIZE
-            self.insert_index = 0
+            pass
         
         self.node_location, self.node_aoi = self._get_node_info(self.inbuffer_info_node, self.inbuffer_info_timestamp)
         self.channel_quality = self._change_channel_quality()
-        self.info = self._get_obs()
-        self.current_obs = self._flatten_dict_values(self.info)
+        self.current_obs = self._get_obs()
+        self.info = self._flatten_dict_values(self.current_obs)
 
         self.leftslots -= 1
         done = self.leftslots <= 0

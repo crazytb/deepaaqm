@@ -126,8 +126,8 @@ def test_model(model, env, dflog, simmode):
     return df, reward
 
 # Test loop
-test_num = 100
-RAALGO = 'CSMA'
+test_num = 20
+RAALGO = 'slottedaloha'
 aqm_algorithms = ['deepaaqm', 'sred', 'codel']
 
 test_env = ShowerEnv()
@@ -153,33 +153,6 @@ for i, simmode in enumerate(aqm_algorithms):
     filename = "test_log_" + RAALGO + "_" + simmode + ".csv"
     df_total[i].to_csv(filename)
         
-    #     # Plot rewards
-    #     plt.figure()
-    #     plt.clf()
-    #     rewards_t = torch.tensor(reward, dtype=torch.float)
-    #     plt.xlabel('Episode #')
-    #     plt.ylabel('Return')
-    #     plt.plot(rewards_t.numpy())
-
-    #     means = rewards_t.unfold(0, 20, 1).mean(1).view(-1)
-    #     means = torch.cat((torch.zeros(19), means))
-    #     plt.plot(means.numpy())
-    #     # Save plot into files
-    #     filename = simmode + "_test_rewards.png"
-    #     plt.savefig(filename)
-
-    # plt.show()
-
-
-# for simmode in ["deepaaqm", "red", "rlaqm"]:
-#     dflog = ra.randomaccess(NUMNODES, BEACONINTERVAL, FRAMETXSLOT, PER, 'CSMA')
-#     dflog = dflog[dflog['result'] == 'succ']
-#     dflog = dflog.reset_index(drop=True)
-
-#     df, rewards = test_model(net=policy_net_deepaaqm, env=test_env, dflog=dflog, iterations=200, simmode=simmode)
-#     filename = simmode + "_test_log.csv"
-#     df.to_csv(filename)
-
 # Make a dataframe for each algorithm
 consumed_energy = pd.DataFrame(columns=aqm_algorithms)
 for i, simmode in enumerate(aqm_algorithms):
