@@ -120,13 +120,15 @@ def test_model(model, env, dflog, simmode):
         reward += reward_inst
         
         # info and reward_inst to dataframe
-        df1 = pd.DataFrame(data=[[epoch, action.item(), env.leftbuffers, env.consumed_energy, env.current_aois.max(), env.current_aois.mean()]],
-                           columns=['epoch', 'action', 'left_buffer', 'consumed_energy', 'aoi_max', 'aoi_mean'])
-        df = pd.concat([df, df1], axis=0)
+        df1 = pd.DataFrame(data=[[epoch, action.item(), env.leftbuffers, env.consumed_energy]],
+                           columns=['epoch', 'action', 'left_buffer', 'consumed_energy'])
+        df2 = pd.DataFrame(data=[env.current_aois], columns=[f"aoi{x}" for x in range(NUMNODES)])
+        df3 = pd.concat([df1, df2], axis=1)
+        df = pd.concat([df, df3], axis=0)
     return df, reward
 
 # Test loop
-test_num = 20
+test_num = 1
 RAALGO = 'slottedaloha'
 aqm_algorithms = ['deepaaqm', 'sred', 'codel']
 
@@ -159,6 +161,11 @@ for i, simmode in enumerate(aqm_algorithms):
     consumed_energy[simmode] = df_total[i][df_total[i].epoch==BEACONINTERVAL//TIMEEPOCH-1]['consumed_energy']/BEACONINTERVAL
 
 print(consumed_energy)
+
+for i in range(3):
+    plt.plot(df_total[i].epoch, df_total[i].aoi0, label=aqm_algorithms[i])
+plt.legend()
+plt.show()
 
 # Draw a histogram plot for each algorithm using the 'aoi_max' column of df_total in one figure.
 plt.figure(1)
