@@ -24,7 +24,7 @@ BEACONINTERVAL = 100_000  # microseconds
 # MAXAOI = int(np.ceil(BEACONINTERVAL / TIMEEPOCH))
 ACCESSPROB = 1 / NUMNODES
 # ACCESSPROB = 1
-POWERCOEFF = 1
+POWERCOEFF = 0.1
 AOIPENALTY = 1
 PER = 0.1
 PEAKAOITHRES = 20_000   # That is, 5 000 for 5ms, (5,20)
@@ -236,7 +236,7 @@ class ShowerEnv(Env):
                 self.inbuffer_info_timestamp[-1] = 0
                 self.leftbuffers += 1
                 self.insert_index -= 1
-            reward -= 0.308
+            reward -= POWERCOEFF*0.308
             self.consumed_energy += 280 * 1.1 * FRAMETIME    # milliamperes * voltage * time
 
         # 1: DISCARD
@@ -251,16 +251,12 @@ class ShowerEnv(Env):
                 self.inbuffer_info_timestamp[-1] = 0
                 self.leftbuffers += 1
                 self.insert_index -= 1
-            reward -= 0.154
+            reward -= POWERCOEFF*0.154
             self.consumed_energy += 50 * 1.1 * FRAMETIME    # milliamperes * voltage * time
 
-        # 2: FLUSH
+        # 2: Leave
         elif action == 2:
-            # Flush all buffers
-            self.inbuffer_info_node.fill(0)
-            self.inbuffer_info_timestamp.fill(0)
-            self.leftbuffers = BUFFERSIZE
-            self.insert_index = 0
+            pass
         
         self.node_location, self.node_aoi = self._get_node_info(self.inbuffer_info_node, self.inbuffer_info_timestamp)
         self.channel_quality = self._change_channel_quality()
@@ -273,7 +269,7 @@ class ShowerEnv(Env):
         # if self.current_aois.max() >= (PEAKAOITHRES / BEACONINTERVAL):
         reward -= np.clip(self.current_aois - (PEAKAOITHRES / BEACONINTERVAL), 0, None).sum()
         # count the number of nodes whose aoi is less than PEAKAOITHRES / BEACONINTERVAL
-        reward += np.count_nonzero(self.current_aois < (PEAKAOITHRES / BEACONINTERVAL)) * (1/NUMNODES)
+        # reward += np.count_nonzero(self.current_aois < (PEAKAOITHRES / BEACONINTERVAL)) * (1/NUMNODES)
         
         return self.current_obs, reward, False, done, self.info
 

@@ -26,7 +26,7 @@ if is_ipython:
     from IPython import display
 plt.ion()
 
-RAALGO = 'CSMA'
+RAALGO = 'slottedaloha'
 
 forwardprobability = 0.5
 writing = 1
@@ -137,7 +137,7 @@ def optimize_model():
     torch.nn.utils.clip_grad_value_(policy_net.parameters(), 100)
     optimizer.step()
     
-num_episodes = 1000
+num_episodes = 200
 
 for i_episode in range(num_episodes):
     # Initialize the environment and state

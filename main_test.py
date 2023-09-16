@@ -158,6 +158,8 @@ consumed_energy = pd.DataFrame(columns=aqm_algorithms)
 for i, simmode in enumerate(aqm_algorithms):
     consumed_energy[simmode] = df_total[i][df_total[i].epoch==BEACONINTERVAL//TIMEEPOCH-1]['consumed_energy']/BEACONINTERVAL
 
+print(consumed_energy)
+
 # Draw a histogram plot for each algorithm using the 'aoi_max' column of df_total in one figure.
 plt.figure(1)
 plt.clf()
@@ -170,7 +172,7 @@ for i, simmode in enumerate(aqm_algorithms):
     plt.plot(bins[:-1], cdf, label=simmode)
 plt.legend()
 plt.savefig("test_log_" + RAALGO + "_aoi_max.png")
-plt.show()
+# plt.show()
 
 # Draw a histogram plot for each algorithm using the 'aoi_mean' column of df_total in one figure.
 plt.figure(2)
@@ -184,7 +186,7 @@ for i, simmode in enumerate(aqm_algorithms):
     plt.plot(bins[:-1], cdf, label=simmode)
 plt.legend()
 plt.savefig("test_log_" + RAALGO + "_aoi_mean.png")
-plt.show()
+# plt.show()
 
 # Draw a histogram plot for each algorithm using the 'left_buffer' column of df_total in one figure.
 plt.figure(3)
