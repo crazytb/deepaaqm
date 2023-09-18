@@ -74,7 +74,7 @@ def plot_rewards(show_result=False):
         plt.title('Result')
     else:
         plt.clf()
-        plt.title('Training...')
+        plt.title(f'Training..., RA: {RAALGO}, Nodes: {NUMNODES}')
     plt.xlabel('Episode')
     plt.ylabel('Reward')
     plt.plot(reward_t.numpy())
@@ -137,7 +137,7 @@ def optimize_model():
     torch.nn.utils.clip_grad_value_(policy_net.parameters(), 100)
     optimizer.step()
     
-num_episodes = 200
+num_episodes = 500
 
 for i_episode in range(num_episodes):
     # Initialize the environment and state
@@ -151,13 +151,13 @@ for i_episode in range(num_episodes):
     for epoch in range(BEACONINTERVAL//TIMEEPOCH):
         # Select and perform an action
         action = select_action(state)
-        print(info)
+        # print(info)
         env.probenqueue(dflog)
-        print(info)
+        # print(info)
         observation, reward, terminated, truncated, info = env.step(action.item())
         # observation, reward, terminated, truncated, info = env.step_rlaqm(action.item(), dflog)
         reward = torch.tensor([reward], device=device)
-        print(action.item(), info)
+        print(f"Iter: {i_episode}, Epoch: {epoch}, Action: {action.item()}, Reward: {reward.item()}")
         
         done = terminated or truncated
         if done:
@@ -190,7 +190,7 @@ for i_episode in range(num_episodes):
             episode_rewards.append(rewards)
             plot_rewards()
     
-print('Complete')
+print(f'Complete, RA: {RAALGO}, Nodes: {NUMNODES}')
 plot_rewards(show_result=True)
 plt.ioff()
 

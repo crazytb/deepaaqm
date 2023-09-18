@@ -14,12 +14,13 @@ learning_rate = 0.0001
 gamma = 1
 
 # Parameters
-BUFFERSIZE = 10  # Def. 10
+BUFFERSIZE = 20  # Def. 10
 NUMNODES = 10
 DIMSTATES = 2 * NUMNODES + 1
 FRAMETIME = 270  # microseconds
 TIMEEPOCH = 300  # microseconds
 FRAMETXSLOT = 30
+FRAMEAGGLIMIT = int(TIMEEPOCH/FRAMETXSLOT)
 BEACONINTERVAL = 100_000  # microseconds
 # MAXAOI = int(np.ceil(BEACONINTERVAL / TIMEEPOCH))
 ACCESSPROB = 1 / NUMNODES
@@ -223,36 +224,30 @@ class ShowerEnv(Env):
             if self._is_buffer_empty():
                 pass
             else:
-                dequenode = self.inbuffer_info_node[0]
-                dequenodeaoi_timestamp = self.inbuffer_info_timestamp[0]
+                dequenodes = self.inbuffer_info_node[self.inbuffer_info_node != 0][:FRAMEAGGLIMIT]
+                dequenodeaoi_timestamps = self.inbuffer_info_timestamp[self.inbuffer_info_node != 0][:FRAMEAGGLIMIT]
+                num_dequenodes = len(dequenodes)
                 
                 if self.channel_quality == 0:
-                    self.current_aois[dequenode - 1] = self.current_time - (dequenodeaoi_timestamp/BEACONINTERVAL)
+                    for dequenode, dequenodeaoi_timestamp in zip(dequenodes, dequenodeaoi_timestamps):
+                        self.current_aois[dequenode - 1] = self.current_time - (dequenodeaoi_timestamp/BEACONINTERVAL)
                 
                 # Left-shift bufferinfo
-                self.inbuffer_info_node[:-1] = self.inbuffer_info_node[1:]
-                self.inbuffer_info_node[-1] = 0
-                self.inbuffer_info_timestamp[:-1] = self.inbuffer_info_timestamp[1:]
-                self.inbuffer_info_timestamp[-1] = 0
-                self.leftbuffers += 1
-                self.insert_index -= 1
+                self.inbuffer_info_node[:-num_dequenodes] = self.inbuffer_info_node[num_dequenodes:]
+                self.inbuffer_info_node[-num_dequenodes:] = 0
+                self.inbuffer_info_timestamp[:-num_dequenodes] = self.inbuffer_info_timestamp[num_dequenodes:]
+                self.inbuffer_info_timestamp[-num_dequenodes:] = 0
+                self.leftbuffers += num_dequenodes
+                self.insert_index -= num_dequenodes
             reward -= POWERCOEFF*0.308
             self.consumed_energy += 280 * 1.1 * FRAMETIME    # milliamperes * voltage * time
 
-        # 1: DISCARD
+        # 1: Flush
         elif action == 1:
-            if self._is_buffer_empty():
-                pass
-            else:
-                # Left-shift bufferinfo
-                self.inbuffer_info_node[:-1] = self.inbuffer_info_node[1:]
-                self.inbuffer_info_node[-1] = 0
-                self.inbuffer_info_timestamp[:-1] = self.inbuffer_info_timestamp[1:]
-                self.inbuffer_info_timestamp[-1] = 0
-                self.leftbuffers += 1
-                self.insert_index -= 1
-            reward -= POWERCOEFF*0.154
-            self.consumed_energy += 50 * 1.1 * FRAMETIME    # milliamperes * voltage * time
+            self.inbuffer_info_node.fill(0)
+            self.inbuffer_info_timestamp.fill(0)
+            self.leftbuffers = BUFFERSIZE
+            self.insert_index = 0
 
         # 2: Leave
         elif action == 2:
@@ -269,7 +264,7 @@ class ShowerEnv(Env):
         # if self.current_aois.max() >= (PEAKAOITHRES / BEACONINTERVAL):
         reward -= np.clip(self.current_aois - (PEAKAOITHRES / BEACONINTERVAL), 0, None).sum()
         # count the number of nodes whose aoi is less than PEAKAOITHRES / BEACONINTERVAL
-        # reward += np.count_nonzero(self.current_aois < (PEAKAOITHRES / BEACONINTERVAL)) * (1/NUMNODES)
+        reward += np.count_nonzero(self.current_aois < (PEAKAOITHRES / BEACONINTERVAL)) * (1/NUMNODES)
         
         return self.current_obs, reward, False, done, self.info
 
