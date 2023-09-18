@@ -15,7 +15,7 @@ gamma = 1
 
 # Parameters
 BUFFERSIZE = 10  # Def. 10
-NUMNODES = 5
+NUMNODES = 10
 DIMSTATES = 2 * NUMNODES + 1
 FRAMETIME = 270  # microseconds
 TIMEEPOCH = 300  # microseconds

@@ -26,7 +26,7 @@ if is_ipython:
     from IPython import display
 plt.ion()
 
-RAALGO = 'slottedaloha'
+RAALGO = 'CSMA'
 
 forwardprobability = 0.5
 writing = 1
@@ -201,5 +201,5 @@ plt.show()
 
 
 if writing == 1:
-    filename = f'policy_model_deepaaqm_{RAALGO}'
+    filename = f'policy_model_deepaaqm_{RAALGO}_{NUMNODES}'
     torch.save(policy_net, filename + '.pt')

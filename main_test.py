@@ -70,8 +70,6 @@ def do_deque(env, interval_delay, first_above_time, next_drop, drop_count, dropp
     else:
         return 0
                 
-
-
 # Make test model for one episode
 def test_model(model, env, dflog, simmode):
     df = pd.DataFrame()
@@ -127,14 +125,15 @@ def test_model(model, env, dflog, simmode):
         df = pd.concat([df, df3], axis=0)
     return df, reward
 
+
 # Test loop
-test_num = 1
+test_num = 10
 RAALGO = 'slottedaloha'
 aqm_algorithms = ['deepaaqm', 'sred', 'codel']
 
 test_env = ShowerEnv()
 test_env.reset()
-policy_net_deepaaqm = torch.load("policy_model_deepaaqm_" + RAALGO + ".pt")
+policy_net_deepaaqm = torch.load("policy_model_deepaaqm_" + RAALGO + "_" + str(NUMNODES) + ".pt")
 policy_net_deepaaqm.eval()
 
 rewards = np.zeros([2, test_num])
@@ -162,10 +161,16 @@ for i, simmode in enumerate(aqm_algorithms):
 
 print(consumed_energy)
 
-for i in range(3):
-    plt.plot(df_total[i].epoch, df_total[i].aoi0, label=aqm_algorithms[i])
-plt.legend()
-plt.show()
+# for i in range(3):
+#     plt.plot(df_total[i].epoch, df_total[i].aoi0, label=aqm_algorithms[i])
+# plt.legend()
+# plt.show()
+
+# for i in range(5):
+#     st = 'aoi' + str(i)
+#     plt.plot(df_total[0].epoch, df_total[0][st], label=st)
+# plt.legend()
+# plt.show()
 
 # Draw a histogram plot for each algorithm using the 'aoi_max' column of df_total in one figure.
 plt.figure(1)
@@ -174,41 +179,42 @@ plt.xlabel('Max AoI')
 plt.ylabel('Frequency')
 plt.axvline(x=PEAKAOITHRES/BEACONINTERVAL, color='blue', linestyle='solid')
 for i, simmode in enumerate(aqm_algorithms):
-    counts, bins = np.histogram(df_total[i]['aoi_max'], bins=100)
+    counts, bins = np.histogram(df_total[i].iloc[:,5:], bins=100)
     cdf = np.cumsum(counts)/np.sum(counts)
     plt.plot(bins[:-1], cdf, label=simmode)
 plt.legend()
-plt.savefig("test_log_" + RAALGO + "_aoi_max.png")
-# plt.show()
-
-# Draw a histogram plot for each algorithm using the 'aoi_mean' column of df_total in one figure.
-plt.figure(2)
-plt.clf()
-plt.xlabel('Mean AoI')
-plt.ylabel('Frequency')
-plt.axvline(x=PEAKAOITHRES/BEACONINTERVAL, color='blue', linestyle='solid')
-for i, simmode in enumerate(aqm_algorithms):
-    counts, bins = np.histogram(df_total[i]['aoi_mean'], bins=100)
-    cdf = np.cumsum(counts)/np.sum(counts)
-    plt.plot(bins[:-1], cdf, label=simmode)
-plt.legend()
-plt.savefig("test_log_" + RAALGO + "_aoi_mean.png")
-# plt.show()
-
-# Draw a histogram plot for each algorithm using the 'left_buffer' column of df_total in one figure.
-plt.figure(3)
-plt.clf()
-plt.xlabel('Left Buffer')
-plt.ylabel('Frequency')
-for i, simmode in enumerate(aqm_algorithms):
-    counts, bins = np.histogram(df_total[i]['left_buffer'], bins=100)
-    cdf = np.cumsum(counts)/np.sum(counts)
-    plt.plot(bins[:-1], cdf, label=simmode)
-plt.legend()
-plt.savefig("test_log_" + RAALGO + "_left_buffer.png")
+plt.title(f"RA: {RAALGO}, Nodes: {NUMNODES}")
+plt.savefig("test_log_" + RAALGO + "_" + str(NUMNODES) + ".png")
 plt.show()
+
+# # Draw a histogram plot for each algorithm using the 'aoi_mean' column of df_total in one figure.
+# plt.figure(2)
+# plt.clf()
+# plt.xlabel('Mean AoI')
+# plt.ylabel('Frequency')
+# plt.axvline(x=PEAKAOITHRES/BEACONINTERVAL, color='blue', linestyle='solid')
+# for i, simmode in enumerate(aqm_algorithms):
+#     counts, bins = np.histogram(df_total[i]['aoi_mean'], bins=100)
+#     cdf = np.cumsum(counts)/np.sum(counts)
+#     plt.plot(bins[:-1], cdf, label=simmode)
+# plt.legend()
+# plt.savefig("test_log_" + RAALGO + "_aoi_mean.png")
+# # plt.show()
+
+# # Draw a histogram plot for each algorithm using the 'left_buffer' column of df_total in one figure.
+# plt.figure(3)
+# plt.clf()
+# plt.xlabel('Left Buffer')
+# plt.ylabel('Frequency')
+# for i, simmode in enumerate(aqm_algorithms):
+#     counts, bins = np.histogram(df_total[i]['left_buffer'], bins=100)
+#     cdf = np.cumsum(counts)/np.sum(counts)
+#     plt.plot(bins[:-1], cdf, label=simmode)
+# plt.legend()
+# plt.savefig("test_log_" + RAALGO + "_left_buffer.png")
+# plt.show()
 
 # Save the dataframe df_total into a csv file
 for i, simmode in enumerate(aqm_algorithms):
-    filename = "test_log_" + RAALGO + "_" + simmode + ".csv"
+    filename = f"test_log_{simmode}_{RAALGO}_{NUMNODES}.csv"
     df_total[i].to_csv(filename)
