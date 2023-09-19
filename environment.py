@@ -14,7 +14,7 @@ learning_rate = 0.0001
 gamma = 1
 
 # Parameters
-BUFFERSIZE = 20  # Def. 10
+BUFFERSIZE = 20  # Def. 20
 NUMNODES = 10
 DIMSTATES = 2 * NUMNODES + 1
 FRAMETIME = 270  # microseconds
@@ -264,7 +264,7 @@ class ShowerEnv(Env):
         # if self.current_aois.max() >= (PEAKAOITHRES / BEACONINTERVAL):
         reward -= np.clip(self.current_aois - (PEAKAOITHRES / BEACONINTERVAL), 0, None).sum()
         # count the number of nodes whose aoi is less than PEAKAOITHRES / BEACONINTERVAL
-        reward += np.count_nonzero(self.current_aois < (PEAKAOITHRES / BEACONINTERVAL)) * (1/NUMNODES)
+        # reward += np.count_nonzero(self.current_aois < (PEAKAOITHRES / BEACONINTERVAL)) * (1/NUMNODES)
         
         return self.current_obs, reward, False, done, self.info
 
