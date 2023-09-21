@@ -133,7 +133,7 @@ aqm_algorithms = ['deepaaqm', 'sred', 'codel']
 
 test_env = ShowerEnv()
 test_env.reset()
-policy_net_deepaaqm = torch.load("policy_model_deepaaqm_" + RAALGO + "_" + str(NUMNODES) + ".pt")
+policy_net_deepaaqm = torch.load("policy_model_deepaaqm_" + RAALGO + "_" + str(5) + ".pt")
 policy_net_deepaaqm.eval()
 
 rewards = np.zeros([2, test_num])
@@ -215,6 +215,6 @@ plt.show()
 # plt.show()
 
 # Save the dataframe df_total into a csv file
-for i, simmode in enumerate(aqm_algorithms):
-    filename = f"test_log_{simmode}_{RAALGO}_{NUMNODES}.csv"
-    df_total[i].to_csv(filename)
+# for i, simmode in enumerate(aqm_algorithms):
+#     filename = f"test_log_{simmode}_{RAALGO}_{NUMNODES}.csv"
+#     df_total[i].to_csv(filename)
