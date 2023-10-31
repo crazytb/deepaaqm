@@ -26,7 +26,7 @@ if is_ipython:
     from IPython import display
 plt.ion()
 
-RAALGO = 'slottedaloha'
+RAALGO = 'CSMA'
 
 forwardprobability = 0.5
 writing = 1
@@ -137,7 +137,7 @@ def optimize_model():
     torch.nn.utils.clip_grad_value_(policy_net.parameters(), 100)
     optimizer.step()
     
-num_episodes = 200
+num_episodes = 1000
 
 for i_episode in range(num_episodes):
     # Initialize the environment and state
@@ -199,7 +199,11 @@ plt.savefig('result.png')
 
 plt.show()
 
+filename = f'policy_model_deepaaqm_{RAALGO}_{NUMNODES}'
 
-if writing == 1:
-    filename = f'policy_model_deepaaqm_{RAALGO}_{NUMNODES}'
-    torch.save(policy_net, filename + '.pt')
+# if writing == 1:
+    # torch.save(policy_net, filename + '.pt')
+    
+# Save returns for each episode to csv file
+df = pd.DataFrame(episode_rewards, columns=['reward'])
+df.to_csv(filename + '.csv')
