@@ -26,7 +26,7 @@ if is_ipython:
     from IPython import display
 plt.ion()
 
-RAALGO = 'CSMA'
+RAALGO = 'slottedaloha'
 
 forwardprobability = 0.5
 writing = 1
@@ -201,8 +201,8 @@ plt.show()
 
 filename = f'policy_model_deepaaqm_{RAALGO}_{NUMNODES}'
 
-# if writing == 1:
-    # torch.save(policy_net, filename + '.pt')
+if writing == 1:
+    torch.save(policy_net, filename + '.pt')
     
 # Save returns for each episode to csv file
 df = pd.DataFrame(episode_rewards, columns=['reward'])
